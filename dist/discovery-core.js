@@ -1,4 +1,4 @@
-import {normalizeDoi} from './core.js?v=9';
+import {normalizeDoi,learningLevel} from './core.js?v=10';
 const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const stop=new Set('de del el la los las un una y en sobre con para por como que quiero queremos estudiar estudio analizar comparar investigar proyecto experimento mediante utilizando usando voy vamos se al es son tengo hacer hago registrar registros the a an and or of in on with for to from i we want study investigate compare using research project experiment aim aims propose will would'.split(' '));
 function words(s){return normalize(s).match(/[a-z0-9][a-z0-9+-]{1,}/g)?.filter(w=>!stop.has(w))||[]}
@@ -21,3 +21,6 @@ export async function translateQuery(text,{signal,area=false,fetcher=fetch}={}){
  return output.join(' ').replace(/^I(?: am|'m) (?:looking|searching) for academic publications (?:on|about)\s*/i,'').replace(/\.$/,'').trim();
 }
 export function mergeDiscoveryBatch(existing,incoming){const papers=[...existing],ids=[];for(const paper of incoming){let known=papers.find(p=>samePaper(p,paper));if(!known){let id=paper.id,n=2;while(papers.some(p=>p.id===id))id=paper.id+'-'+n++;known={...paper,id};papers.push(known)}if(!ids.includes(known.id))ids.push(known.id)}return {papers,ids}}
+
+export function learningSearchUrls(query){const intro=new URL(searchUrl(query)),advanced=new URL(searchUrl(query));intro.searchParams.set('search.title','(introduction OR fundamentals OR elementary OR tutorial OR basics OR primer OR foundations)');advanced.searchParams.set('search.title','(advanced OR applications OR frontiers OR recent advances)');return [intro.href,advanced.href]}
+export function selectLearningPapers(candidates,count){const unique=[];for(const p of candidates)if(!unique.some(x=>samePaper(x,p)))unique.push(p);const buckets=[0,1,2,3].map(level=>unique.filter(p=>learningLevel(p).level===level));if(!buckets[0].length)return {papers:[],missingBasics:true};const selected=[],take=(level,n)=>{for(const p of buckets[level]){if(n<=0||selected.length>=count)break;if(!selected.includes(p)){selected.push(p);n--}}};take(0,Math.max(1,Math.ceil(count*.4)));take(1,Math.floor(count*.2));take(3,count>1?Math.max(1,Math.floor(count*.25)):0);for(const level of [2,1,3,0])take(level,count-selected.length);return {papers:selected.sort((a,b)=>learningLevel(a).level-learningLevel(b).level),missingBasics:false}}

@@ -124,3 +124,10 @@ context.discoveryConfig.createGraph(papers.slice(0,2));assert.equal(elements.get
 assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).graphPaperIds.length,2);
 elements.get('#allLibrary').onclick();assert.equal(elements.get('#nodeLayer').children.length,11);assert.equal(savedState.graphPaperIds,null);
 console.log('Grafo de N nodos, biblioteca completa conservada, ruta intacta y vuelta a todos los artículos: correctos.');
+
+context.discoveryConfig.createGraph(papers.slice(0,4),{learning:true});assert(savedState.learningMode);assert(savedState.readingEnabled);assert.equal(savedState.readingPlan.length,4);
+elements.get('#readingList').children[0].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);assert(elements.get('#edgeLayer').children.every(e=>e.attrs['stroke-opacity']==='0'));assert(elements.get('#edgeLayer').children.every(e=>e.style.pointerEvents==='none'));
+elements.get('#readingList').children[1].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);
+elements.get('#readingList').children.at(-1).children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,0);
+elements.get('#readingSwitch').checked=false;elements.get('#readingSwitch').onchange();assert.equal(elements.get('#routeLayer').children.length,0);assert(elements.get('#edgeLayer').children.some(e=>e.attrs['stroke-opacity']!=='0'));
+console.log('Paso 1→2 únicamente, paso 2→3, último paso sin salida y retorno al grafo de relaciones: correctos.');
