@@ -20,7 +20,7 @@ h1{margin-top:0;transform:translateY(-12px)}
 #topicsPanel button[aria-pressed="true"]{background:#b1e2ff12}
 .topic-swatch{width:7px;height:7px;border-radius:50%;flex-shrink:0;background:var(--topic-color);box-shadow:0 0 10px var(--topic-color)}
 .topic-number{margin-left:auto;color:#94a7b9;font-size:10px}.topic-check{width:12px;color:#d6eef7}
-.topic-label{font-family:var(--font);font-size:10px;letter-spacing:1.3px;fill:#abc3d5;opacity:.65;pointer-events:none;text-anchor:middle;paint-order:stroke;stroke:#080e17;stroke-width:3px}
+
 @media(max-width:650px){h1{margin-top:0;transform:translateY(-5px)}.universe{height:calc(100svh - 155px)}.topic-filter{right:6px;top:10px}#topicsToggle{padding:9px 12px;font-size:11px;gap:10px}}
 
 .reading-toggle{position:absolute;right:172px;top:10px;z-index:8;font-size:12px;padding:11px 16px;background:#111c2bd9;backdrop-filter:blur(16px);border-color:#d4e9f025;display:flex;gap:9px;align-items:center}

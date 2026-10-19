@@ -65,7 +65,7 @@ const secondGroup=expectedGroups.find(g=>g.id!==firstGroup.id);topicList.childre
 assert.equal(elements.get('#nodeLayer').children.length,firstGroup.paperIds.length+secondGroup.paperIds.length);
 elements.get('#allTopics').onclick();assert.equal(elements.get('#nodeLayer').children.length,11);
 assert.equal(elements.get('#topicCount').textContent,'Todos');
-assert.equal(elements.get('#topicLayer').children.length,expectedGroups.length);
+assert(!page.includes('id="topicLayer"'));
 const unknown=[{id:'a',title:'Lithium battery electrodes'},{id:'b',title:'Lithium battery durability'}];
 const groups=core.groupByContent(unknown);assert.equal(groups.groups.length,1);assert.deepEqual(groups.groups[0].paperIds,['a','b']);
 console.log('Agrupación temática, filtro múltiple, selección tras filtrar, reinicio y temas ajenos a neurociencia: correctos.');
