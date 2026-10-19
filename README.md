@@ -42,4 +42,6 @@ With Node.js 22 or later, run:
 npm test
 ```
 
+GitHub Actions runs the tests on Node.js 22 and 24 for pull requests and updates to `main`. See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch and review workflow.
+
 Open Sans font files and their license are included in `dist/fonts/`.
