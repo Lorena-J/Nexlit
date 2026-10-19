@@ -40,3 +40,7 @@ h1{margin-top:0;transform:translateY(-12px)}
 .discover-language{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}.discover-language label{margin:0}.discover-language select{font:11px var(--font);padding:8px;color:#c2d5e2;background:#0a1422;border:1px solid #c0d8e829;border-radius:5px}.discover-language small{font-size:9px;color:#8098ad}
 
 .discover-learning{display:flex;align-items:center;gap:13px;font-size:12px;padding:10px 14px;margin:14px 0;border-color:#b8deed33}.discover-learning[aria-pressed="true"]{border-color:#c8dfac88;background:#c8dfac12;color:#d4ebbe}.learning-label{display:inline-block;font-size:9px;border-radius:12px;padding:3px 9px;color:#d4e8bf;border:1px solid #c1df9b33;margin-bottom:8px}.route-edge{stroke:#f0d7a0;stroke-width:2.2;stroke-dasharray:7 4;pointer-events:none;filter:drop-shadow(0 0 4px #efd9a466)}.route-number{pointer-events:all;cursor:pointer}.reading-number{border:0;padding:0;align-self:start;min-height:24px;background:transparent;font:12px var(--font)}
+
+/* Rotating the graph is a gesture, never a text selection or native drag. */
+#graph,#graph *{-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
+.article-card,.article-card h2,.article-card p,.article-card small{-webkit-user-select:text;user-select:text}
