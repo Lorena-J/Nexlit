@@ -11,7 +11,7 @@ export function parseBib(src){
  }if(!papers.length)throw Error('No se encontraron referencias con título.');const seen=new Set();for(const p of papers){if(seen.has(p.id))throw Error('Clave bibliográfica duplicada: '+p.id);seen.add(p.id)}return papers;
 }
 export function normalizeDoi(s=''){return String(s).trim().replace(/^https?:\/\/(?:dx\.)?doi\.org\//i,'').replace(/^doi:\s*/i,'').toLowerCase()}
-const stop=new Set('the a an and or of in on to for with by from its their this that as is are be was were not we it at into through using use how can between during et al study studies role effects effect associated underlying region hippocampal hippocampus social memory neuronal neurons neural cell cells'.split(' '));
+const stop=new Set('the a an and or of in on to for with by from its their this that as is are be was were not we it at into through using use how can between during et al study studies role effects effect associated underlying analysis research results paper article review introduction overview based approach el la los las de del en por para con una uno un que se su sus como estudio estudios investigacion resultado resultados'.split(' '));
 export function tokens(p){return [...new Set((p.title+' '+(p.abstract??'')+' '+(p.keywords??'')).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').match(/[a-z0-9]{3,}/g)?.filter(w=>!stop.has(w))??[])]}
 export function connections(papers,manual=[]){
  const docs=papers.map(tokens),freq=new Map();docs.forEach(a=>a.forEach(t=>freq.set(t,(freq.get(t)??0)+1)));let result=[];
@@ -21,30 +21,17 @@ export function connections(papers,manual=[]){
 }
 export function validateWorkspace(data){if(data?.version!==1||!Array.isArray(data.papers)||!Array.isArray(data.manual))throw Error('Este JSON no es una biblioteca de Atlas.');if(!data.papers.length)throw Error('La biblioteca está vacía.');const ids=new Set();for(const p of data.papers){if(typeof p.id!=='string'||typeof p.title!=='string'||ids.has(p.id))throw Error('Referencia inválida o duplicada.');ids.add(p.id);for(const k of ['authors','year','journal','doi','url','abstract','keywords','notes'])if(p[k]!==undefined&&typeof p[k]!=='string')throw Error('Campo inválido: '+k);if(!['Pendiente','Leyendo','Leído'].includes(p.status))p.status='Pendiente';if(!Array.isArray(p.references)||p.references.some(x=>typeof x!=='string'))throw Error('Lista de referencias inválida.')}if(data.graphPaperIds!==undefined&&data.graphPaperIds!==null&&(!Array.isArray(data.graphPaperIds)||!data.graphPaperIds.length||new Set(data.graphPaperIds).size!==data.graphPaperIds.length||data.graphPaperIds.some(id=>!ids.has(id))))throw Error('Selección del grafo inválida.');if(data.readingEnabled!==undefined&&typeof data.readingEnabled!=='boolean')throw Error('Estado de la ruta inválido.');if(data.readingPlan===undefined)data.readingPlan=[];if(!Array.isArray(data.readingPlan))throw Error('Ruta de lectura inválida.');const planned=new Set();for(const item of data.readingPlan){if(!item||!ids.has(item.id)||planned.has(item.id)||typeof item.reason!=='string')throw Error('Ruta de lectura inválida o duplicada.');planned.add(item.id)}for(const e of data.manual)if(e.type!=='manual'||typeof e.reason!=='string'||!ids.has(e.source)||!ids.has(e.target))throw Error('Conexión manual inválida.');return data}
 
-// Topic suggestions from available text, with title/keyword matches weighted above abstracts.
-// Unrecognized subjects use shared, distinctive terms rather than neuroscience labels.
+// Prefer provider-assigned topics; otherwise form groups from distinctive shared terms.
 export function groupByContent(papers){
- const rules=[
-  {id:'analysis',label:'Métodos de análisis',terms:[/spike sort\w*/g,/kilosort\w*/g,/cluster\w*/g,/spike detect\w*/g,/analisis de datos/g]},
-  {id:'olfaction',label:'Información olfativa',terms:[/olfact\w*/g,/odo(?:u)?r\w*/g,/chemosensor\w*/g,/urinar\w*/g,/\bmups?\b/g]},
-  {id:'representations',label:'Representaciones sociales',terms:[/represent\w*/g,/\bcoding\b/g,/identit\w*/g,/novelty/g,/threat/g,/safety/g,/selectiv\w*/g]},
-  {id:'circuits',label:'Circuitos y dinámica',terms:[/\bcircuit\w*/g,/entorhinal/g,/ripples?/g,/reactivat\w*/g,/physiolog\w*/g,/oscillat\w*/g,/connectiv\w*/g]},
-  {id:'matrix',label:'Matriz y plasticidad',terms:[/perineuronal/g,/extracellular/g,/\bpnns?\b/g,/plastic\w*/g,/chondroitin\w*/g]},
-  {id:'memory',label:'Memoria social',terms:[/social memory/g,/social recognition/g,/memoria social/g,/reconocimiento social/g]}
- ];
- const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
- const groups=new Map(),assignment=new Map(),unknown=[];
- for(const p of papers){const title=norm(p.title),keywords=norm(p.keywords),abstract=norm(p.abstract);let best=null,bestScore=0;for(const rule of rules){let score=0;for(const term of rule.terms){score+=(title.match(term)||[]).length*4+(keywords.match(term)||[]).length*3+(abstract.match(term)||[]).length*.12}if(score>bestScore){bestScore=score;best=rule}}if(best&&bestScore>=3){if(!groups.has(best.id))groups.set(best.id,{id:best.id,label:best.label,paperIds:[]});groups.get(best.id).paperIds.push(p.id);assignment.set(p.id,best.id)}else unknown.push(p)}
- const docs=unknown.map(tokens),freq=new Map();docs.forEach(ts=>ts.forEach(t=>freq.set(t,(freq.get(t)||0)+1)));const assigned=new Set();
- const terms=[...freq].filter(([term,count])=>count>=2&&!(unknown.length>2&&count>unknown.length*.75)&&term!=='ca2').sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
- for(const [term] of terms){const members=unknown.filter((p,i)=>!assigned.has(p.id)&&docs[i].includes(term));if(members.length<2)continue;const id='term-'+term;groups.set(id,{id,label:term.charAt(0).toUpperCase()+term.slice(1),paperIds:members.map(p=>p.id)});members.forEach(p=>{assigned.add(p.id);assignment.set(p.id,id)})}
- const rest=unknown.filter(p=>!assigned.has(p.id));if(rest.length){groups.set('other',{id:'other',label:'Otros temas',paperIds:rest.map(p=>p.id)});rest.forEach(p=>assignment.set(p.id,'other'))}
+ const assignment=new Map(),groups=new Map(),pending=[];
+ for(const p of papers){if(p.topic?.id&&p.topic?.label){const id='topic-'+p.topic.id;if(!groups.has(id))groups.set(id,{id,label:p.topic.label,paperIds:[]});groups.get(id).paperIds.push(p.id);assignment.set(p.id,id)}else pending.push(p)}
+ const docs=pending.map(tokens),freq=new Map();docs.forEach(ts=>ts.forEach(t=>freq.set(t,(freq.get(t)||0)+1)));const assigned=new Set();
+ const terms=[...freq].filter(([,count])=>count>=2&&!(pending.length>3&&count>pending.length*.6)).sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+ for(const [term]of terms){const members=pending.filter((p,i)=>!assigned.has(p.id)&&docs[i].includes(term));if(members.length<2)continue;const id='term-'+term;groups.set(id,{id,label:/\d/.test(term)?term.toUpperCase():term.charAt(0).toUpperCase()+term.slice(1),paperIds:members.map(p=>p.id)});members.forEach(p=>{assigned.add(p.id);assignment.set(p.id,id)})}
+ const rest=pending.filter(p=>!assigned.has(p.id));if(rest.length){groups.set('other',{id:'other',label:'Otros temas',paperIds:rest.map(p=>p.id)});rest.forEach(p=>assignment.set(p.id,'other'))}
  return {groups:[...groups.values()],assignment};
 }
-
 export function suggestReadingPlan(papers){
- const {assignment}=groupByContent(papers);
- const stages={memory:1,circuits:2,olfaction:3,matrix:3,representations:4,analysis:5};
- const reasons={memory:'Base experimental para la memoria social.',circuits:'Circuitos y dinámica: contexto para interpretar la actividad neuronal.',olfaction:'Información olfativa: conexión entre estímulos y respuestas.',matrix:'Matriz y plasticidad: mecanismos que pueden modificar el circuito.',representations:'Representaciones sociales: integración de las dimensiones estudiadas.',analysis:'Métodos de análisis: apoyo para trabajar con los registros.'};
- return papers.map(p=>{const review=/\breview\b|revisi[oó]n|current opinion|annual review/i.test([p.type,p.title,p.journal].join(' ')),topic=assignment.get(p.id);return {id:p.id,stage:review?0:(stages[topic]??2),year:Number(p.year)||9999,reason:review?'Panorama general antes de los estudios específicos.':reasons[topic]||'Continuidad temática; dentro del grupo, del trabajo más antiguo al reciente.'}}).sort((a,b)=>a.stage-b.stage||a.year-b.year||a.id.localeCompare(b.id)).map(({id,reason})=>({id,reason}));
+ const {assignment,groups}=groupByContent(papers),labels=new Map(groups.map(g=>[g.id,g.label]));
+ return papers.map(p=>{const review=/review|revisi[oó]n|survey|state of the art|annual review|current opinion/i.test([p.type,p.title,p.journal].join(' ')),intro=/introduction|fundamentals?|basics?|tutorial|primer|introduccion|fundamentos|conceptos basicos/i.test(p.title),methods=/methodolog|protocol|implementation|metodolog/i.test(p.title),group=assignment.get(p.id);return {id:p.id,stage:review?0:intro?1:methods?3:2,group,year:Number(p.year)||9999,reason:review?'Visión general: revisión o síntesis del área.':intro?'Conceptos y fundamentos antes de trabajos más específicos.':methods?'Métodos y aplicación práctica.':'Continuidad temática: '+(labels.get(group)||'tema general')+'. Dentro del grupo, orden cronológico.'}}).sort((a,b)=>a.stage-b.stage||(a.group||'').localeCompare(b.group||'')||a.year-b.year||a.id.localeCompare(b.id)).map(({id,reason})=>({id,reason}));
 }

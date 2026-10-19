@@ -1,6 +1,6 @@
-import {mergeDiscoveryBatch} from './discovery-core.js?v=8';
-import {setupDiscovery} from './discovery-ui.js?v=8';
-import {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan} from './core.js?v=8';
+import {mergeDiscoveryBatch} from './discovery-core.js?v=9';
+import {setupDiscovery} from './discovery-ui.js?v=9';
+import {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan} from './core.js?v=9';
 const $=s=>document.querySelector(s),NS='http://www.w3.org/2000/svg',KEY='atlas-library-v1';
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let state={version:1,papers:[],manual:[]},edges=[],selected=null,hovered=null,positions=new Map(),nodeEls=new Map(),edgeEls=[],projected=new Map();
