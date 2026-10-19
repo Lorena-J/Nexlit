@@ -20,3 +20,24 @@ export function connections(papers,manual=[]){
  const ids=new Set(papers.map(p=>p.id));return result.concat(manual.filter(e=>ids.has(e.source)&&ids.has(e.target)));
 }
 export function validateWorkspace(data){if(data?.version!==1||!Array.isArray(data.papers)||!Array.isArray(data.manual))throw Error('Este JSON no es una biblioteca de Atlas.');if(!data.papers.length)throw Error('La biblioteca está vacía.');const ids=new Set();for(const p of data.papers){if(typeof p.id!=='string'||typeof p.title!=='string'||ids.has(p.id))throw Error('Referencia inválida o duplicada.');ids.add(p.id);for(const k of ['authors','year','journal','doi','url','abstract','keywords','notes'])if(p[k]!==undefined&&typeof p[k]!=='string')throw Error('Campo inválido: '+k);if(!['Pendiente','Leyendo','Leído'].includes(p.status))p.status='Pendiente';if(!Array.isArray(p.references)||p.references.some(x=>typeof x!=='string'))throw Error('Lista de referencias inválida.')}for(const e of data.manual)if(e.type!=='manual'||typeof e.reason!=='string'||!ids.has(e.source)||!ids.has(e.target))throw Error('Conexión manual inválida.');return data}
+
+// Topic suggestions from available text, with title/keyword matches weighted above abstracts.
+// Unrecognized subjects use shared, distinctive terms rather than neuroscience labels.
+export function groupByContent(papers){
+ const rules=[
+  {id:'analysis',label:'Métodos de análisis',terms:[/spike sort\w*/g,/kilosort\w*/g,/cluster\w*/g,/spike detect\w*/g,/analisis de datos/g]},
+  {id:'olfaction',label:'Información olfativa',terms:[/olfact\w*/g,/odo(?:u)?r\w*/g,/chemosensor\w*/g,/urinar\w*/g,/\bmups?\b/g]},
+  {id:'representations',label:'Representaciones sociales',terms:[/represent\w*/g,/\bcoding\b/g,/identit\w*/g,/novelty/g,/threat/g,/safety/g,/selectiv\w*/g]},
+  {id:'circuits',label:'Circuitos y dinámica',terms:[/\bcircuit\w*/g,/entorhinal/g,/ripples?/g,/reactivat\w*/g,/physiolog\w*/g,/oscillat\w*/g,/connectiv\w*/g]},
+  {id:'matrix',label:'Matriz y plasticidad',terms:[/perineuronal/g,/extracellular/g,/\bpnns?\b/g,/plastic\w*/g,/chondroitin\w*/g]},
+  {id:'memory',label:'Memoria social',terms:[/social memory/g,/social recognition/g,/memoria social/g,/reconocimiento social/g]}
+ ];
+ const norm=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+ const groups=new Map(),assignment=new Map(),unknown=[];
+ for(const p of papers){const title=norm(p.title),keywords=norm(p.keywords),abstract=norm(p.abstract);let best=null,bestScore=0;for(const rule of rules){let score=0;for(const term of rule.terms){score+=(title.match(term)||[]).length*4+(keywords.match(term)||[]).length*3+(abstract.match(term)||[]).length*.12}if(score>bestScore){bestScore=score;best=rule}}if(best&&bestScore>=3){if(!groups.has(best.id))groups.set(best.id,{id:best.id,label:best.label,paperIds:[]});groups.get(best.id).paperIds.push(p.id);assignment.set(p.id,best.id)}else unknown.push(p)}
+ const docs=unknown.map(tokens),freq=new Map();docs.forEach(ts=>ts.forEach(t=>freq.set(t,(freq.get(t)||0)+1)));const assigned=new Set();
+ const terms=[...freq].filter(([term,count])=>count>=2&&!(unknown.length>2&&count>unknown.length*.75)&&term!=='ca2').sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0]));
+ for(const [term] of terms){const members=unknown.filter((p,i)=>!assigned.has(p.id)&&docs[i].includes(term));if(members.length<2)continue;const id='term-'+term;groups.set(id,{id,label:term.charAt(0).toUpperCase()+term.slice(1),paperIds:members.map(p=>p.id)});members.forEach(p=>{assigned.add(p.id);assignment.set(p.id,id)})}
+ const rest=unknown.filter(p=>!assigned.has(p.id));if(rest.length){groups.set('other',{id:'other',label:'Otros temas',paperIds:rest.map(p=>p.id)});rest.forEach(p=>assignment.set(p.id,'other'))}
+ return {groups:[...groups.values()],assignment};
+}
