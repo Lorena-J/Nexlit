@@ -27,7 +27,7 @@ const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.met
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
 let animation,savedState;
 const context=vm.createContext({core,console,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
-const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;\n');
+const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;const setupDiscovery=()=>{};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
 await vm.runInContext('(async()=>{'+source+'})()',context);
 const nodes=elements.get('#nodeLayer').children;
 assert.equal(nodes.length,11);
