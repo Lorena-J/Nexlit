@@ -21,13 +21,13 @@ class Element {
 }
 const page=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8'),elements=new Map();
 for(const match of page.matchAll(/id="([^"]+)"/g))elements.set('#'+match[1],new Element());
-elements.get('#topicsPanel').hidden=true;
+elements.get('#topicsPanel').hidden=true;elements.get('#readingPanel').hidden=true;
 elements.set('.universe',new Element());elements.get('#graph').append(new Element('defs'));
 const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.meta.url),'utf8'));
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
 let animation;
 const context=vm.createContext({core,console,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(){}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
-const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent}=core;\n');
+const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;\n');
 await vm.runInContext('(async()=>{'+source+'})()',context);
 const nodes=elements.get('#nodeLayer').children;
 assert.equal(nodes.length,11);
@@ -68,3 +68,27 @@ assert.equal(elements.get('#topicLayer').children.length,5);
 const unknown=[{id:'a',title:'Lithium battery electrodes'},{id:'b',title:'Lithium battery durability'}];
 const groups=core.groupByContent(unknown);assert.equal(groups.groups.length,1);assert.deepEqual(groups.groups[0].paperIds,['a','b']);
 console.log('Agrupación temática, filtro múltiple, selección tras filtrar, reinicio y temas ajenos a neurociencia: correctos.');
+
+// Reading route: suggest, reorder, remove, add, resume, persist and validate imported plans.
+elements.get('#readingToggle').onclick();assert.equal(elements.get('#readingPanel').hidden,false);
+elements.get('#suggestReading').onclick();
+let reading=elements.get('#readingList').children;assert.equal(reading.length,11);
+assert.equal(reading[0].children[1].children[0].textContent,papers.find(p=>p.id==='oliva2022').title);
+const firstTitle=reading[0].children[1].children[0].textContent;
+reading[0].children[1].children[3].children[2].onclick();
+reading=elements.get('#readingList').children;
+assert.equal(reading[1].children[1].children[0].textContent,firstTitle,'Move down changes the order');
+const titleAtStart=reading[0].children[1].children[0].textContent;
+const checkbox=reading[0].children[1].children[3].children[0].children[0];checkbox.checked=true;checkbox.onchange();
+assert.equal(elements.get('#readingProgress').textContent,'1 de 11 leídos');
+elements.get('#continueReading').onclick();assert.equal(elements.get('#cardTitle').textContent,firstTitle);assert.equal(elements.get('#readingPanel').hidden,true);
+reading=elements.get('#readingList').children;reading[0].children[1].children[3].children[3].onclick();assert.equal(elements.get('#readingList').children.length,10);
+const removedPaper=papers.find(p=>p.title===titleAtStart);elements.get('#nodeLayer').children.find(n=>n.attrs['data-id']===removedPaper.id).onclick(event);
+elements.get('#addReading').onclick();assert.equal(elements.get('#readingList').children.length,11);
+elements.get('#addReading').onclick();assert.equal(elements.get('#readingList').children.length,11,'Adding twice does not duplicate an article');
+const plan=core.suggestReadingPlan(papers);assert.equal(new Set(plan.map(x=>x.id)).size,papers.length);
+const exported={version:1,papers,manual:[],readingPlan:plan};const imported=core.validateWorkspace(JSON.parse(JSON.stringify(exported)));assert.deepEqual(imported.readingPlan,plan);
+assert.throws(()=>core.validateWorkspace({...exported,readingPlan:[plan[0],plan[0]]}));
+assert.throws(()=>core.validateWorkspace({...exported,readingPlan:[{id:'missing',reason:'invalid'}]}));
+const valid=core.validateWorkspace({version:1,papers,manual:[]});assert.deepEqual(valid.readingPlan,[]);
+console.log('Ruta: sugerencia, reordenación, lectura, continuar, eliminar, añadir sin duplicados y exportación/importación correctos.');
