@@ -51,7 +51,7 @@ const css=readFileSync(new URL('../dist/style.css',import.meta.url),'utf8');
 assert(css.includes('.node .halo{pointer-events:none;'));
 assert(css.includes('fill:#d8e6f0;opacity:1;'));
 assert(css.includes('.node .hit-target{pointer-events:all}'));
-console.log('11 nodos: clic, tarjeta, título, posición, cierre, teclado y resumen correctos. Animación estable tras 100 fotogramas.');
+console.log('11 nodes: clicks, cards, keyboard access and summaries pass. Animation is stable over 100 frames.');
 
 const topicList=elements.get('#topicsList');
 const expectedGroups=core.groupByContent(papers).groups;assert.equal(topicList.children.length,expectedGroups.length);
@@ -64,11 +64,11 @@ const currentNodes=elements.get('#nodeLayer').children;currentNodes[0].onclick(e
 const secondGroup=expectedGroups.find(g=>g.id!==firstGroup.id);topicList.children.find(b=>b.children[1].textContent===secondGroup.label).onclick();
 assert.equal(elements.get('#nodeLayer').children.length,firstGroup.paperIds.length+secondGroup.paperIds.length);
 elements.get('#allTopics').onclick();assert.equal(elements.get('#nodeLayer').children.length,11);
-assert.equal(elements.get('#topicCount').textContent,'Todos');
+assert.equal(elements.get('#topicCount').textContent,'All');
 assert(!page.includes('id="topicLayer"'));
 const unknown=[{id:'a',title:'Lithium battery electrodes'},{id:'b',title:'Lithium battery durability'}];
 const groups=core.groupByContent(unknown);assert.equal(groups.groups.length,1);assert.deepEqual(groups.groups[0].paperIds,['a','b']);
-console.log('Agrupación temática, filtro múltiple, selección tras filtrar, reinicio y temas ajenos a neurociencia: correctos.');
+console.log('Topic grouping, multiple filters, selection, reset and multidisciplinary topics pass.');
 
 // Reading route: suggest, reorder, remove, add, resume, persist and validate imported plans.
 elements.get('#readingToggle').onclick();assert.equal(elements.get('#readingPanel').hidden,false);
@@ -81,7 +81,7 @@ reading=elements.get('#readingList').children;
 assert.equal(reading[1].children[1].children[0].textContent,firstTitle,'Move down changes the order');
 const titleAtStart=reading[0].children[1].children[0].textContent;
 const checkbox=reading[0].children[1].children[3].children[0].children[0];checkbox.checked=true;checkbox.onchange();
-assert.equal(elements.get('#readingProgress').textContent,'1 de 11 leídos');
+assert.equal(elements.get('#readingProgress').textContent,'1 of 11 read');
 elements.get('#continueReading').onclick();assert.equal(elements.get('#cardTitle').textContent,firstTitle);assert.equal(elements.get('#readingPanel').hidden,true);
 reading=elements.get('#readingList').children;reading[0].children[1].children[3].children[3].onclick();assert.equal(elements.get('#readingList').children.length,10);
 const removedPaper=papers.find(p=>p.title===titleAtStart);elements.get('#nodeLayer').children.find(n=>n.attrs['data-id']===removedPaper.id).onclick(event);
@@ -92,7 +92,7 @@ const exported={version:1,papers,manual:[],readingPlan:plan};const imported=core
 assert.throws(()=>core.validateWorkspace({...exported,readingPlan:[plan[0],plan[0]]}));
 assert.throws(()=>core.validateWorkspace({...exported,readingPlan:[{id:'missing',reason:'invalid'}]}));
 const valid=core.validateWorkspace({version:1,papers,manual:[]});assert.deepEqual(valid.readingPlan,[]);
-console.log('Ruta: sugerencia, reordenación, lectura, continuar, eliminar, añadir sin duplicados y exportación/importación correctos.');
+console.log('Reading paths: suggestions, reordering, progress, resume, removal, deduplication and import/export pass.');
 
 // Pause the route without deleting it; read/unread state remains independent of route membership.
 const selectedTitle=elements.get('#cardTitle').textContent;
@@ -109,7 +109,7 @@ elements.get('#markRead').onclick();assert.equal(elements.get('#markRead').attrs
 elements.get('#markRead').onclick();assert.equal(elements.get('#markRead').attrs['aria-pressed'],String(wasRead));
 if(!wasRead)elements.get('#markRead').onclick();
 const readPaper=savedState.papers.find(p=>p.title===selectedTitle);
-assert.equal(readPaper.status,'Leído');assert(!savedState.readingPlan.some(item=>item.id===readPaper.id));
+assert.equal(readPaper.status,'Read');assert(!savedState.readingPlan.some(item=>item.id===readPaper.id));
 const readNode=elements.get('#nodeLayer').children.find(n=>n.attrs['data-id']===readPaper.id);
 assert.equal(readNode.querySelector('.read-check').textContent,'✓');
 assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).readingEnabled,false);
@@ -117,20 +117,20 @@ elements.get('#readingSwitch').checked=true;elements.get('#readingSwitch').oncha
 assert.equal(savedState.readingEnabled,true);assert.equal(JSON.stringify(savedState.readingPlan),planBefore);
 assert(elements.get('#nodeLayer').children.some(n=>n.querySelector('.route-number').textContent!==''));
 assert(css.includes('#graph:focus{outline:none}'));
-console.log('Activar/desactivar sin perder la ruta, marcado leído fuera de ella, persistencia y foco del contenedor: correctos.');
+console.log('Path toggling, independent read status, persistence and graph focus pass.');
 
 const previousLibrary=JSON.parse(JSON.stringify(savedState.papers)),previousPlan=JSON.stringify(savedState.readingPlan);
 context.discoveryConfig.createGraph(papers.slice(0,2));assert.equal(elements.get('#nodeLayer').children.length,2);assert.equal(savedState.papers.length,previousLibrary.length);assert.deepEqual(savedState.papers,previousLibrary);assert.equal(JSON.stringify(savedState.readingPlan),previousPlan);assert.equal(elements.get('#allLibrary').hidden,false);
 assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).graphPaperIds.length,2);
 elements.get('#allLibrary').onclick();assert.equal(elements.get('#nodeLayer').children.length,11);assert.equal(savedState.graphPaperIds,null);
-console.log('Grafo de N nodos, biblioteca completa conservada, ruta intacta y vuelta a todos los artículos: correctos.');
+console.log('Graph size, library preservation, reading path preservation and full-library reset pass.');
 
 context.discoveryConfig.createGraph(papers.slice(0,4),{learning:true});assert(savedState.learningMode);assert(savedState.readingEnabled);assert.equal(savedState.readingPlan.length,4);
 elements.get('#readingList').children[0].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);assert(elements.get('#edgeLayer').children.every(e=>e.attrs['stroke-opacity']==='0'));assert(elements.get('#edgeLayer').children.every(e=>e.style.pointerEvents==='none'));
 elements.get('#readingList').children[1].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);
 elements.get('#readingList').children.at(-1).children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,0);
 elements.get('#readingSwitch').checked=false;elements.get('#readingSwitch').onchange();assert.equal(elements.get('#routeLayer').children.length,0);assert(elements.get('#edgeLayer').children.some(e=>e.attrs['stroke-opacity']!=='0'));
-console.log('Paso 1→2 únicamente, paso 2→3, último paso sin salida y retorno al grafo de relaciones: correctos.');
+console.log('Step-by-step reading links and return to the relationship graph pass.');
 
 const movable=elements.get('#card');elements.get('#nodeLayer').children[0].onclick(event);
 movable.style.left='100px';movable.style.top='100px';
@@ -145,4 +145,4 @@ for(const fn of docHandlers.get('pointerdown'))fn({target:{closest:()=>null}});
 assert.equal(elements.get('#readingPanel').hidden,true);assert.equal(movable.hidden,true);
 elements.get('#topicsToggle').onclick();for(const fn of docHandlers.get('pointerdown'))fn({target:{closest:s=>s==='.topic-filter'?elements.get('#topicsPanel'):null}});assert.equal(elements.get('#topicsPanel').hidden,false);
 for(const fn of docHandlers.get('pointerdown'))fn({target:{closest:()=>null}});assert.equal(elements.get('#topicsPanel').hidden,true);
-console.log('Tarjeta móvil sin recolocación automática, límites, teclado y cierre de menús al pulsar fuera: correctos.');
+console.log('Card dragging, position bounds, keyboard movement and outside-click dismissal pass.');
