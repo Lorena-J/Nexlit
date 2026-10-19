@@ -25,8 +25,8 @@ elements.get('#topicsPanel').hidden=true;elements.get('#readingPanel').hidden=tr
 elements.set('.universe',new Element());elements.get('#graph').append(new Element('defs'));
 const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.meta.url),'utf8'));
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
-let animation;
-const context=vm.createContext({core,console,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(){}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
+let animation,savedState;
+const context=vm.createContext({core,console,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
 const source=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;\n');
 await vm.runInContext('(async()=>{'+source+'})()',context);
 const nodes=elements.get('#nodeLayer').children;
@@ -92,3 +92,28 @@ assert.throws(()=>core.validateWorkspace({...exported,readingPlan:[plan[0],plan[
 assert.throws(()=>core.validateWorkspace({...exported,readingPlan:[{id:'missing',reason:'invalid'}]}));
 const valid=core.validateWorkspace({version:1,papers,manual:[]});assert.deepEqual(valid.readingPlan,[]);
 console.log('Ruta: sugerencia, reordenación, lectura, continuar, eliminar, añadir sin duplicados y exportación/importación correctos.');
+
+// Pause the route without deleting it; read/unread state remains independent of route membership.
+const selectedTitle=elements.get('#cardTitle').textContent;
+let row=elements.get('#readingList').children.find(item=>item.children[1].children[0].textContent===selectedTitle);
+row.children[1].children[3].children[3].onclick();
+const planBefore=JSON.stringify(savedState.readingPlan);
+elements.get('#readingSwitch').checked=false;elements.get('#readingSwitch').onchange();
+assert.equal(savedState.readingEnabled,false);assert.equal(JSON.stringify(savedState.readingPlan),planBefore);
+assert(elements.get('#nodeLayer').children.every(n=>n.querySelector('.route-number').textContent===''));
+assert(elements.get('#nodeLayer').children.every(n=>!n.attrs.class.includes('route-next')));
+assert.equal(elements.get('#continueReading').disabled,true);
+const wasRead=elements.get('#markRead').attrs['aria-pressed']==='true';
+elements.get('#markRead').onclick();assert.equal(elements.get('#markRead').attrs['aria-pressed'],String(!wasRead));
+elements.get('#markRead').onclick();assert.equal(elements.get('#markRead').attrs['aria-pressed'],String(wasRead));
+if(!wasRead)elements.get('#markRead').onclick();
+const readPaper=savedState.papers.find(p=>p.title===selectedTitle);
+assert.equal(readPaper.status,'Leído');assert(!savedState.readingPlan.some(item=>item.id===readPaper.id));
+const readNode=elements.get('#nodeLayer').children.find(n=>n.attrs['data-id']===readPaper.id);
+assert.equal(readNode.querySelector('.read-check').textContent,'✓');
+assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).readingEnabled,false);
+elements.get('#readingSwitch').checked=true;elements.get('#readingSwitch').onchange();
+assert.equal(savedState.readingEnabled,true);assert.equal(JSON.stringify(savedState.readingPlan),planBefore);
+assert(elements.get('#nodeLayer').children.some(n=>n.querySelector('.route-number').textContent!==''));
+assert(css.includes('#graph:focus{outline:none}'));
+console.log('Activar/desactivar sin perder la ruta, marcado leído fuera de ella, persistencia y foco del contenedor: correctos.');
