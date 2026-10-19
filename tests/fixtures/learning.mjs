@@ -8,5 +8,15 @@ export const lessonPapers=[
 ].map((paper,i)=>({...paper,authors:'Example, Alice',year:'2024',doi:'10.0000/lesson-'+i,topic:{id:'graph-theory',label:'Graph Theory'},keywords:'graph theory',references:[],status:'Unread',notes:'',type:'article',relevanceScore:5-i}));
 export function asOpenAlex(paper){
  const index={};paper.abstract.split(/\s+/).forEach((word,i)=>(index[word]??=[]).push(i));
- return {id:'https://openalex.org/'+paper.id,title:paper.title,doi:paper.doi,language:'en',abstract_inverted_index:index,primary_topic:{id:'https://openalex.org/Tgraph',display_name:'Graph Theory',subfield:{display_name:'Graph Theory'}},authorships:[],publication_year:2024};
+ return {id:'https://openalex.org/'+paper.id,title:paper.title,doi:paper.doi,language:'en',abstract_inverted_index:index,primary_topic:{id:'https://openalex.org/'+paper.topic.id,display_name:paper.topic.label,subfield:{display_name:paper.topic.label}},authorships:[],publication_year:2024};
 }
+
+// A larger topic spans several complementary readings per learning stage.
+const socialBase=lessonPapers.map(paper=>({...paper,id:'social-'+paper.id,title:paper.title.replace(/Graph Theory/g,'Social Recognition'),abstract:paper.abstract.replace(/graph theory/g,'social recognition'),keywords:'social recognition',topic:{id:'social-recognition',label:'Social Recognition'},doi:paper.doi+'-social'}));
+const perspectives=[
+ ['olfactory cues','odor discrimination and individual scent profiles'],
+ ['facial perception','visual identity and perceptual invariance'],
+ ['developmental trajectories','juvenile maturation and lifespan changes'],
+ ['neuroendocrine modulation','oxytocin signaling and hormonal regulation']
+];
+export const expandedLessonPapers=[...socialBase,...socialBase.flatMap((paper,stage)=>perspectives.map(([label,detail],i)=>({...paper,id:paper.id+'-'+i,doi:paper.doi+'-'+i,title:paper.title+': '+label,abstract:paper.abstract+' This reading examines '+detail+'.',keywords:paper.keywords+', '+label})))];

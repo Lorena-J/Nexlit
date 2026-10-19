@@ -9,7 +9,9 @@ With **Learn from scratch**, Nexlit builds a sequence of learning objectives and
 3. Set a maximum number of readings and a candidate-pool budget, then choose **Create learning path**.
 4. Open **Reading path** to inspect each objective, its prerequisites and the abstract excerpt under **Why this reading?**
 
-The current planner chooses one primary reading per objective, so a complete plan has five readings. The reading limit is an upper bound; the planner does not add filler to reach it.
+The graph shows the same topic and citation connections as an imported bibliography, including in learning mode. Selecting a reading adds only the arrow from that reading to the next step. Closing its card or pausing the reading path removes that arrow while keeping the graph connections visible. The last reading has no outgoing reading arrow. Reading-order arrows do not indicate citations.
+
+The five stages organize the route; they do not limit it to five readings. Nexlit first establishes a reachable progression with its prerequisite readings, then adds complementary material within stages toward your requested count (up to 200). Repeated DOI/title records and readings without additional content do not fill the route. The selected count can remain below the target when the loaded candidate pool lacks supported, complementary material; this does not mean the topic has little published literature.
 
 ## Objectives and dependencies
 
@@ -31,13 +33,13 @@ Teaching roles are estimated from title and abstract cues. A usable abstract mus
 
 Explicit assumed knowledge such as “requires prior knowledge of calculus” is recorded. It blocks automatic inclusion unless that named area has already been covered as the foundation subject. Nexlit does not assume that every concept mentioned in an abstract has been taught.
 
-The next unmet objective drives the next OpenAlex request. Learning searches make at most two page requests for that stage; they stop if it remains unsupported, the reading limit is reached, or the overall request budget is exhausted. The selected candidate pool allows up to one page request per 20 candidates, with a maximum of 25 requests. Learning expansion replaces normal graph expansion rather than running both. Cancellation and the 60-second operation timeout still apply.
+Missing stages receive search priority. Once all stages are covered, Nexlit continues the original target search and stage-specific searches until the requested reading count is reached, sources are exhausted or the request budget is used. Each stage-specific search makes at most two page requests. A missing prerequisite blocks advancement to later stages, while supported earlier stages can still gain complementary readings. The selected candidate pool allows up to one page request per 20 candidates, with a maximum of 25 requests. Learning expansion replaces normal graph expansion rather than running both. Cancellation and the 60-second operation timeout still apply.
 
-A partial path contains only its supported prefix. Later readings are withheld when an earlier bridge is missing. If no beginner entry is found, no learning graph is created and the existing library/path stays intact. The preview and saved reading panel identify missing stages. Reordering or removing prerequisite readings produces a review message. Teaching evidence, content bridges and gap information survive JSON export/import.
+A partial path contains only its supported stages, with potentially several readings per stage. Later readings are withheld when an earlier bridge is missing. If no beginner entry is found, no learning graph is created and the existing library/path stays intact. The preview and saved reading panel identify missing stages. Reordering or removing prerequisite readings produces a review message. Teaching evidence, content bridges and gap information survive JSON export/import.
 
 ## What still needs review
 
-These are deterministic metadata rules, not a semantic assessment of prerequisites or a guarantee that five readings teach an entire field. Shared words are evidence of a possible connection, not proof of teaching continuity. Abstract wording, missing metadata and technical prerequisites not stated in an abstract can cause errors. A broader foundation area can also be too broad for the target; review the suggested area and selected readings.
+These are deterministic metadata rules, not a semantic assessment of prerequisites or a guarantee that the selected readings teach an entire field. Shared words are evidence of a possible connection, not proof of teaching continuity. Abstract wording, missing metadata and technical prerequisites not stated in an abstract can cause errors. A broader foundation area can also be too broad for the target; review the suggested area and selected readings.
 
 The automated tests cover synthetic complete and partial paths, misleading reviews, missing abstracts, unrelated methods, explicit assumed knowledge, cancellation, and persistence. Real-publication paths still need human evaluation.
 

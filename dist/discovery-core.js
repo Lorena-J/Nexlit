@@ -1,5 +1,5 @@
-import {buildLearningPath,LEARNING_STAGES} from './learning-core.js?v=20';
-import {normalizeDoi} from './core.js?v=20';
+import {buildLearningPath,LEARNING_STAGES} from './learning-core.js?v=29';
+import {normalizeDoi} from './core.js?v=29';
 const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 const stop=new Set('de del el la los las un una y en sobre con para por como que quiero queremos estudiar estudio analizar comparar investigar proyecto experimento mediante utilizando usando voy vamos se al es son tengo hacer hago registrar registros the a an and or of in on with for to from i we want study investigate compare using research project experiment aim aims propose will would'.split(' '));
 function words(s){return normalize(s).match(/[a-z0-9][a-z0-9+-]{1,}/g)?.filter(w=>!stop.has(w))||[]}

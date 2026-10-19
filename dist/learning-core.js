@@ -56,40 +56,92 @@ function contentBridge(before,after,subject){
  return [...previous].filter(word=>next.has(word)).slice(0,4);
 }
 export function buildLearningPath(candidates,{subject='',target='',targetPaperIds=null,count=200}={}){
- const goals=learningGoals({subject,target}),steps=[],papers=[],covered=new Set(),used=new Set(),provided=new Set(),gaps=[];
- const targetIds=targetPaperIds?new Set(targetPaperIds):null;
- const classified=candidates.map((paper,index)=>({paper,index,assessment:assessLearning(paper)}));
- for(const goal of goals){
-  const prerequisites=goal.requires.filter(id=>!covered.has(id));
-  const limit=steps.length>=count;
-  if(prerequisites.length||limit){gaps.push({stage:goal.stage,label:goal.label,reason:limit?'The requested reading limit was reached.':'A preceding learning objective is still missing.'});continue}
-  const choices=classified.filter(({paper,assessment})=>{
-   if(used.has(paper.id)||!assessment.supported||assessment.level!==goal.stage)return false;
-   if(goal.stage<3?!coversSubject(paper,subject):targetIds?!targetIds.has(paper.id):!coversSubject(paper,subject))return false;
-   if(!assessment.assumed.every(required=>provided.has(normalize(required))))return false;
-   if(goal.stage>=2&&goal.requires.some(id=>!contentBridge(papers.find(p=>p.id===steps.find(step=>step.goalId===id)?.id),paper,subject).length))return false;
-   return true;
-  });
-  const choice=choices[0];
-  if(!choice){
-   const scoped=classified.some(({paper,assessment})=>assessment.level===goal.stage&&assessment.supported&&coversSubject(paper,subject));
-   const unknown=classified.some(({paper,assessment})=>assessment.level===goal.stage&&coversSubject(paper,subject)&&(!assessment.supported||assessment.assumed.length));
-   gaps.push({stage:goal.stage,label:goal.label,reason:scoped?'Readings were found, but their prerequisites or content bridges need review.':unknown?'Potential readings need prerequisite or abstract review.':'No suitable reading was found for this objective.'});continue;
-  }
-  const {paper,assessment}=choice;
-  const requiredSteps=goal.requires.map(id=>steps.find(step=>step.goalId===id)?.id).filter(Boolean);
-  const previous=steps.at(-1);
-  const bridges=goal.stage>=2?requiredSteps.map(id=>({from:id,concepts:contentBridge(papers.find(p=>p.id===id),paper,subject)})):[];
-  const bridgeText=bridges.length?' Shared content with prerequisite readings: '+[...new Set(bridges.flatMap(bridge=>bridge.concepts))].join(', ')+'.':'';
-  const transition=previous?`Builds on ${previous.stageLabel.toLowerCase()} before moving to ${goal.label.toLowerCase()}.`:'Start here: no domain knowledge is assumed by this planned stage.';
-  const prerequisiteText=goal.requires.length?goal.requires.map(id=>LEARNING_STAGES.find(s=>s.id===id).label).join(', '):'None within this area';
-  steps.push({id:paper.id,goalId:goal.id,stage:goal.stage,stageLabel:goal.label,objective:goal.objective,requires:requiredSteps,evidence:assessment.evidence,confidence:assessment.confidence,bridges,
-   reason:`${goal.objective} Prerequisites: ${prerequisiteText}. ${transition}${bridgeText}`});
-  papers.push(paper);used.add(paper.id);covered.add(goal.id);
-  // Only the named foundation area is treated as covered, never every word in an abstract.
-  if(goal.stage===1)provided.add(normalize(subject));
+ const goals=learningGoals({subject,target}),targetIds=targetPaperIds?new Set(targetPaperIds):null;
+ const limit=Math.min(200,Math.max(1,Math.floor(Number(count)||200)));
+ const seenIds=new Set(),seenTitles=new Set(),seenDois=new Set(),classified=[];
+ for(const [index,paper]of candidates.entries()){
+  const title=normalize(paper.title),doi=String(paper.doi||'').toLowerCase().replace(/^https?:\/\/(?:dx\.)?doi\.org\//,'');
+  if(seenIds.has(paper.id)||(title&&seenTitles.has(title))||(doi&&seenDois.has(doi)))continue;
+  seenIds.add(paper.id);if(title)seenTitles.add(title);if(doi)seenDois.add(doi);
+  classified.push({paper,index,assessment:assessLearning(paper),dependencies:[]});
  }
- return {version:1,subject,target,steps,papers,gaps,complete:gaps.length===0,goals};
+ const scopeMatches=(record,stage)=>stage<3?(coversSubject(record.paper,subject)||targetIds?.has(record.paper.id)):(targetIds?targetIds.has(record.paper.id):coversSubject(record.paper,subject));
+ const pools=goals.map(()=>[]);
+ // Build a dependency graph over all supported candidates, rather than choosing
+ // one foundation and discarding other readings that could provide a useful bridge.
+ for(const goal of goals){
+  for(const record of classified){
+   const {paper,assessment}=record;
+   if(!assessment.supported||assessment.level!==goal.stage||!scopeMatches(record,goal.stage))continue;
+   if(!assessment.assumed.every(required=>goal.stage>=2&&pools[1].length&&normalize(required)===normalize(subject)))continue;
+   const dependencies=[];
+   for(const requiredGoal of goal.requires){
+    const requiredStage=LEARNING_STAGES.findIndex(stage=>stage.id===requiredGoal);
+    const options=pools[requiredStage].map(prior=>({prior,bridge:goal.stage>=2?contentBridge(prior.paper,paper,subject):[]}))
+     .filter(option=>goal.stage<2||option.bridge.length)
+     .sort((a,b)=>b.bridge.length-a.bridge.length||a.prior.index-b.prior.index);
+    if(!options.length)break;
+    dependencies.push(options[0].prior);
+   }
+   if(dependencies.length!==goal.requires.length)continue;
+   record.dependencies=dependencies;pools[goal.stage].push(record);
+  }
+ }
+ const selected=new Map(),closureCache=new Map();
+ function closure(record){
+  if(closureCache.has(record))return closureCache.get(record);
+  const result=new Map();
+  for(const prerequisite of record.dependencies)for(const [id,item]of closure(prerequisite))result.set(id,item);
+  result.set(record.paper.id,record);closureCache.set(record,result);return result;
+ }
+ function missing(record){return [...closure(record).values()].filter(item=>!selected.has(item.paper.id))}
+ function include(records){for(const record of records)selected.set(record.paper.id,record)}
+ // Establish the deepest reachable progression that fits the reading budget first.
+ for(let stage=goals.length-1;stage>=0;stage--){
+  const seed=pools[stage].map(record=>({record,needed:missing(record)})).filter(item=>item.needed.length<=limit)
+   .sort((a,b)=>a.needed.length-b.needed.length||a.record.index-b.record.index)[0];
+  if(seed){include(seed.needed);break}
+ }
+ const excluded=new Set([...bridgeStop,...terms(subject)]);
+ const vocabularyCache=new Map();
+ const vocabulary=record=>{
+  if(!vocabularyCache.has(record))vocabularyCache.set(record,new Set(terms([record.paper.title,record.paper.abstract,record.paper.keywords].join(' ')).filter(word=>word.length>3&&!excluded.has(word))));
+  return vocabularyCache.get(record);
+ };
+ const all=pools.flat();
+ // Expand by complementary content. Stages are categories, not five fixed slots
+ // or percentage quotas. A candidate brings its prerequisites with it.
+ while(selected.size<limit){
+  const covered=new Set([...selected.values()].flatMap(record=>[...vocabulary(record)].map(word=>record.assessment.level+':'+word)));
+  let best=null;
+  for(const record of all){
+   if(selected.has(record.paper.id))continue;
+   const needed=missing(record);if(selected.size+needed.length>limit)continue;
+   const newTerms=new Set(needed.flatMap(item=>[...vocabulary(item)].map(word=>item.assessment.level+':'+word)).filter(word=>!covered.has(word)));
+   if(newTerms.size<2)continue;
+   const utility=newTerms.size/Math.sqrt(needed.reduce((size,item)=>size+vocabulary(item).size,0)||1)
+    +(targetIds?.has(record.paper.id)?0.3:0);
+   if(!best||utility>best.utility)best={needed,utility};
+  }
+  if(!best)break;include(best.needed);
+ }
+ const ordered=[...selected.values()].sort((a,b)=>a.assessment.level-b.assessment.level||a.index-b.index);
+ const steps=ordered.map((record,index)=>{
+  const {paper,assessment}=record,goal=goals[assessment.level],previous=ordered[index-1];
+  const bridges=goal.stage>=2?record.dependencies.map(prior=>({from:prior.paper.id,concepts:contentBridge(prior.paper,paper,subject)})):[];
+  const focus=terms(paper.title).filter(word=>word.length>3&&!excluded.has(word)).slice(0,4);
+  const bridgeText=bridges.length?' Shared content with prerequisite readings: '+[...new Set(bridges.flatMap(bridge=>bridge.concepts))].join(', ')+'.':'';
+  const transition=!previous?'Start here: no domain knowledge is assumed by this planned stage.':previous.assessment.level===goal.stage?'Adds a complementary reading within this stage.':`Builds on earlier prerequisites before moving to ${goal.label.toLowerCase()}.`;
+  return {id:paper.id,goalId:goal.id,stage:goal.stage,stageLabel:goal.label,objective:goal.objective,requires:record.dependencies.map(prior=>prior.paper.id),evidence:assessment.evidence,confidence:assessment.confidence,bridges,
+   reason:`${goal.objective}${focus.length?' Focus: '+focus.join(', ')+'.':''} Prerequisites: ${goal.requires.length?goal.requires.map(id=>LEARNING_STAGES.find(stage=>stage.id===id).label).join(', '):'None within this area'}. ${transition}${bridgeText}`};
+ });
+ const selectedGoals=new Set(steps.map(step=>step.goalId));
+ const gaps=goals.filter(goal=>!selectedGoals.has(goal.id)).map(goal=>({stage:goal.stage,label:goal.label,reason:
+  pools[goal.stage].length?'The requested reading limit was reached.':goal.requires.some(id=>!selectedGoals.has(id))?'A preceding learning objective is still missing.':
+   classified.some(record=>record.assessment.level===goal.stage&&scopeMatches(record,goal.stage))?'Readings were found, but their prerequisites, abstract evidence or content bridges need review.':'No suitable reading was found for this objective.'}));
+ return {version:1,subject,target,steps,papers:ordered.map(record=>record.paper),gaps,complete:gaps.length===0,goals,
+  requestedCount:limit,candidateCount:classified.length,eligibleCount:all.length,selectedCount:steps.length,
+  shortfall:steps.length<limit?'Fewer complementary readings with supported prerequisites were found in the loaded candidates.':''};
 }
 export function learningOrderIssues(steps){
  const seen=new Set(),issues=[];
