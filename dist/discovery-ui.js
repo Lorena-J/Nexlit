@@ -1,21 +1,25 @@
-import {buildLearningPath,learningGoals} from './learning-core.js?v=20';
-import {learningLevel} from './core.js?v=20';
-import {planSearch,compileQuery,rankResults,candidateTarget,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchJobs} from './discovery-core.js?v=20';
+import {createOpenAlexClient} from './openalex-client.js?v=29';
+import {buildLearningPath,learningGoals} from './learning-core.js?v=29';
+import {learningLevel} from './core.js?v=29';
+import {planSearch,compileQuery,rankResults,candidateTarget,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchJobs} from './discovery-core.js?v=29';
 
 export function setupDiscovery({getPapers,addPaper,pickPaper,createGraph}){
  const $=s=>document.querySelector(s),dialog=$('#discoverDialog');
  let mode='area',controller=null,operation=0,results=[],nextPage=null,total=0,activePlan=null,building=false,learning=false,queryEdited=false,queryEnglish=true,loadedQuery='',loadedScope='',loadedLanguage='',foundationAuto='',learningReport=null;
+ const api=createOpenAlexClient({fetcher:(url,options)=>fetch(url,options)});
+ try{api.setKey(sessionStorage.getItem('nexlit-openalex-key')||'')}catch{}
  const scope=()=>$('#discoverBreadth').value||'balanced';
  const el=(tag,attrs={},text)=>{const n=document.createElement(tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n};
  const strip=s=>new DOMParser().parseFromString(String(s||''),'text/html').body.textContent||'';
  const status=text=>{$('#discoverStatus').textContent=text};
- const inputControls=['#discoverInput','#discoverQuery','#discoverBreadth','#discoverInputLanguage','#modeArea','#modeExperiment','#discoverLearning','#discoverGraphCount','#discoverCandidateCount','#discoverFoundation'];
+ const inputControls=['#discoverInput','#discoverQuery','#discoverBreadth','#discoverInputLanguage','#modeArea','#modeExperiment','#discoverLearning','#discoverGraphCount','#discoverCandidateCount','#discoverFoundation','#openalexKey','#openalexUseKey','#openalexRemoveKey'];
  function lock(on){
   for(const selector of inputControls)$(selector).disabled=on;
   $('#discoverSearch').disabled=on;
   $('#discoverMore').disabled=on;
   $('#discoverCreateGraph').disabled=on||!activePlan;
   $('#discoverCancel').hidden=!on;
+  $('#openalexRemoveKey').disabled=on||!api.hasKey();
  }
  function invalidate(){
   results=[];activePlan=null;nextPage=null;loadedQuery='';learningReport=null;render();
@@ -70,14 +74,15 @@ export function setupDiscovery({getPapers,addPaper,pickPaper,createGraph}){
   const context=learningContext(),report=learningReport||currentLearningPath();
   const list=$('#discoverLearningStages');list.replaceChildren();
   for(const goal of learningGoals(context)){
-   const step=report.steps.find(item=>item.goalId===goal.id),gap=report.gaps.find(item=>item.stage===goal.stage);
-   list.append(el('li',{},`${goal.label}: ${goal.objective} ${step?'Reading found.':gap?.reason||'Search pending.'}`));
+   const stageReadings=report.steps.filter(item=>item.goalId===goal.id),gap=report.gaps.find(item=>item.stage===goal.stage);
+   list.append(el('li',{},`${goal.label}: ${goal.objective} ${stageReadings.length?stageReadings.length+' reading(s) found.':gap?.reason||'Search pending.'}`));
   }
-  $('#discoverLearningStatus').textContent=report.complete?'All five stages have candidate readings. Teaching roles are estimated from abstracts.':report.steps.length?`Partial path: ${report.steps.length} reading(s). The next missing stage is ${report.gaps[0]?.label}.`:'The search will start with introductory material and stop if a prerequisite stage is missing.';
+  const requested=Number($('#discoverGraphCount').value)||20;
+  $('#discoverLearningStatus').textContent=`${report.steps.length} / ${requested} readings from ${report.candidateCount||0} loaded candidates. `+(report.complete?'All five stages are covered; more complementary readings can be added.':report.steps.length?`Partial path: the next missing stage is ${report.gaps[0]?.label}.`:'The search starts with introductory material and stops advancement at missing prerequisites.');
  }
  function render(){
   renderLearning();
-  $('#discoverCountLabel').textContent=learning?'Maximum readings':'Papers in the graph';
+  $('#discoverCountLabel').textContent=learning?'Target readings':'Papers in the graph';
   $('#discoverCreateGraph').textContent=learning?'Create learning path ↗':'Create graph ↗';
   const list=$('#discoverResults');list.replaceChildren();const ranked=rankedResults();
   $('#discoverGraphTools').hidden=!results.length;$('#discoverCreateGraph').disabled=!!controller||building||!activePlan;
@@ -103,11 +108,34 @@ export function setupDiscovery({getPapers,addPaper,pickPaper,createGraph}){
    if(!results.some(p=>samePaper(p,paper)))results.push(paper);
   }
  }
- async function request(url,signal){
-  const response=await fetch(url,{signal,credentials:'omit',referrerPolicy:'no-referrer'});
-  if(!response.ok)throw Error(response.status===429?'The service is busy. Wait a few seconds and try again.':'OpenAlex is currently unavailable. Please try again.');
-  return response.json();
+ function showError(error){
+  status(error.message);
+  if(error.code==='daily_budget'||error.code==='authentication'){
+   $('#openalexAccess').open=true;
+   $('#openalexAccessStatus').textContent=error.message;
+  }
  }
+ function renderAccess(){
+  $('#openalexAccessStatus').textContent=api.hasKey()?'Personal OpenAlex key enabled for this tab.':'Using the shared anonymous OpenAlex budget.';
+  $('#openalexRemoveKey').disabled=!api.hasKey();
+ }
+ $('#openalexUseKey').onclick=()=>{
+  const value=$('#openalexKey').value.trim();
+  if(!value){$('#openalexAccessStatus').textContent='Paste your OpenAlex key first.';return}
+  try{
+   api.setKey(value);let saved=false;
+   try{sessionStorage.setItem('nexlit-openalex-key',value);saved=true}catch{}
+   $('#openalexKey').value='';renderAccess();
+   $('#openalexAccessStatus').textContent=saved?'Key saved for this tab. Run your search again.':'Key enabled until this page reloads. Run your search again.';
+   status('OpenAlex key enabled. Run your search again.');
+  }catch(error){$('#openalexAccessStatus').textContent=error.message}
+ };
+ $('#openalexRemoveKey').onclick=()=>{
+  api.setKey('');try{sessionStorage.removeItem('nexlit-openalex-key')}catch{}
+  $('#openalexKey').value='';renderAccess();status('Personal key removed. Requests use the shared anonymous budget.');
+ };
+ renderAccess();
+ const request=(url,signal)=>api.request(url,signal);
  async function page(number,signal,id){
   const data=await request(searchUrl(activePlan.query,number),signal);
   if(id!==operation)return false;
@@ -147,27 +175,34 @@ export function setupDiscovery({getPapers,addPaper,pickPaper,createGraph}){
     if(!more&&$('#discoverFoundation').value===foundationAuto){foundationAuto=results[0]?.topic?.foundation||activePlan.concepts[0]?.label||'';$('#discoverFoundation').value=foundationAuto}
     summary();renderLearning();
    }
-  }catch(error){if(id===operation)status(error.name==='AbortError'?'The query timed out. Please try again.':error.message)}
+  }catch(error){if(id===operation)showError(error.name==='AbortError'?new Error('The query timed out. Please try again.'):error)}
   finally{clearTimeout(timer);if(id===operation){controller=null;lock(false);render()}}
  }
  async function learningCandidates(count,signal,id){
-  const target=candidateTarget(count,$('#discoverCandidateCount').value),maxRequests=Math.ceil(target/20),attempts=new Map();
+  const target=candidateTarget(count,$('#discoverCandidateCount').value),maxRequests=Math.ceil(target/20),attempts=new Map(),exhausted=new Set();
   learningReport=currentLearningPath(count);renderLearning();
   for(let fetched=0;fetched<maxRequests;fetched++){
-   // Missing objectives drive the next request. Never jump over a missing bridge.
-   const gap=learningReport.gaps[0];
-   if(!gap||learningReport.steps.length>=count)break;
-   const stage=gap.stage,number=(attempts.get(stage)||0)+1;
-   if(number>2)break;
-   attempts.set(stage,number);
+   if(learningReport.steps.length>=count)break;
+   const gap=learningReport.gaps[0],stageCounts=new Map(learningReport.goals.map(goal=>[goal.stage,learningReport.steps.filter(step=>step.stage===goal.stage).length]));
+   const available=learningReport.goals.map(goal=>goal.stage).filter(stage=>!exhausted.has(stage)&&(attempts.get(stage)||0)<2&&(!gap||stage<=gap.stage));
+   const stage=gap&&available.includes(gap.stage)?gap.stage:available.sort((a,b)=>stageCounts.get(a)-stageCounts.get(b)||(attempts.get(a)||0)-(attempts.get(b)||0)||a-b)[0];
+   // A complete five-stage outline is not the requested reading count. Continue
+   // the target search and stage searches while there is budget and useful material.
+   if(nextPage&&((learningReport.complete&&fetched%2===0)||stage===undefined)){
+    status(`Expanding the reading path (${learningReport.steps.length} / ${count})…`);
+    if(!await page(nextPage,signal,id))return false;
+    learningReport=currentLearningPath(count);render();continue;
+   }
+   if(stage===undefined)break;
+   const number=(attempts.get(stage)||0)+1;attempts.set(stage,number);
    const job=learningSearchJobs(activePlan,learningContext().subject,stage),url=new URL(job.url);url.searchParams.set('page',String(number));
-   status(`Building the learning path: searching ${job.label.toLowerCase()}…`);
+   status(`Expanding ${job.label.toLowerCase()} (${learningReport.steps.length} / ${count} readings)…`);
    const data=await request(url.href,signal);if(id!==operation)return false;
    const candidates=(data.results||[]).map(record=>fromOpenAlex(record,strip)).filter(Boolean);
    const allowed=new Set(rankResults(candidates,compileQuery(job.query)).filter(item=>item.eligible).map(item=>item.p.id));
    merge((data.results||[]).filter(record=>allowed.has('openalex-'+record.id?.split('/').pop())));
+   if(!(data.results||[]).length||number*20>=Number(data.meta?.count||0)||number>=2)exhausted.add(stage);
    learningReport=currentLearningPath(count);render();
-   if(learningReport.gaps[0]?.stage===stage&&number*20>=Number(data.meta?.count||0))break;
   }
   return true;
  }
@@ -192,7 +227,7 @@ export function setupDiscovery({getPapers,addPaper,pickPaper,createGraph}){
    const choice=learning?{...learningReport,missingBasics:!learningReport?.steps.length}:{papers:eligible.slice(0,count)};
    if(choice.missingBasics){status('No supported beginner entry was found. Review the foundation area or the reading abstracts; no advanced-only path was created.');return}
    createGraph(choice.papers,{learning,learningPath:learning?choice:null});close();
-  }catch(error){if(id===operation)status(error.name==='AbortError'?'The comparison timed out. Loaded results are kept; try again or compare fewer candidates.':error.message)}
+  }catch(error){if(id===operation)showError(error.name==='AbortError'?new Error('The comparison timed out. Loaded results are kept; try again or compare fewer candidates.'):error)}
   finally{clearTimeout(timer);if(id===operation){controller=null;building=false;lock(false);render()}}
  };
  $('#discoverSearch').onclick=()=>search(false);$('#discoverMore').onclick=()=>search(true);
