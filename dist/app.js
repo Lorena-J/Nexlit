@@ -1,10 +1,10 @@
 import {mergeDiscoveryBatch} from './discovery-core.js?v=10';
-import {setupDiscovery} from './discovery-ui.js?v=10';
+import {setupDiscovery} from './discovery-ui.js?v=13';
 import {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan} from './core.js?v=10';
 const $=s=>document.querySelector(s),NS='http://www.w3.org/2000/svg',KEY='atlas-library-v1';
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
 let state={version:1,papers:[],manual:[]},edges=[],selected=null,hovered=null,positions=new Map(),nodeEls=new Map(),edgeEls=[],projected=new Map();
-let routeFocus=false,routeLink=null;
+let routeFocus=false,routeLink=null,cardDrag=null;const cardPlacements=new Map();
 let topicData={groups:[],assignment:new Map()},chosenTopics=new Set(),topicCenters=new Map(),layoutKey='';
 const palette=['#9edce5','#b5b0eb','#b8d8ac','#ecc899','#e1acc7','#98bde9','#c3d0d8'];
 function graphPapers(){return state.graphPaperIds?state.papers.filter(p=>state.graphPaperIds.includes(p.id)):state.papers}
@@ -29,7 +29,7 @@ function renderTopics(){const list=$('#topicsList');list.replaceChildren();$('#t
 function toggleTopics(open){if(open)toggleReading(false);$('#topicsPanel').hidden=!open;$('#topicsToggle').setAttribute('aria-expanded',String(open))}
 $('#topicsToggle').onclick=()=>toggleTopics($('#topicsPanel').hidden);
 $('#allTopics').onclick=()=>{chosenTopics.clear();rebuild(true)};
-document.addEventListener('click',e=>{if(!e.target.closest('.topic-filter'))toggleTopics(false)});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('.topic-filter'))toggleTopics(false);if(!e.target.closest('#readingPanel,#readingToggle'))toggleReading(false);if(selected&&!e.target.closest('#card,.node,.edge,#readingPanel,#readingToggle'))closeCard()},true);
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){const wasOpen=!$('#topicsPanel').hidden;toggleTopics(false);if(wasOpen)$('#topicsToggle').focus()}});
 function toggleReading(open){$('#readingPanel').hidden=!open;$('#readingToggle').setAttribute('aria-expanded',String(open));if(open)toggleTopics(false)}
 $('#readingToggle').onclick=()=>toggleReading($('#readingPanel').hidden);
@@ -66,9 +66,18 @@ function paint(dt){projected=new Map([...positions].map(([id,p])=>[id,project(p)
  if(routeLink){const a=projected.get(routeLink.source),b=projected.get(routeLink.target);if(a&&b){routeLink.line.setAttribute('x1',a.sx);routeLink.line.setAttribute('y1',a.sy);routeLink.line.setAttribute('x2',b.sx);routeLink.line.setAttribute('y2',b.sy)}}
  // Keep node elements attached: reparenting during animation interrupts pointer clicks and focus.
  if(selected)positionCard();}
-function positionCard(){const p=projected.get(selected);if(!p)return;const graph=$('#graph'),wrap=$('.universe').getBoundingClientRect(),card=$('#card');const pt=graph.createSVGPoint();pt.x=p.sx;pt.y=p.sy;const screen=pt.matrixTransform(graph.getScreenCTM());let x=screen.x-wrap.left+42*p.scale,y=screen.y-wrap.top-35;
- if(innerWidth<650){x=(wrap.width-card.offsetWidth)/2;y=Math.max(12,wrap.height-card.offsetHeight-55)}else{if(x+card.offsetWidth>wrap.width-16)x=screen.x-wrap.left-card.offsetWidth-42*p.scale;y=Math.max(12,Math.min(y,wrap.height-card.offsetHeight-60))}card.style.left=Math.max(12,Math.min(x,wrap.width-card.offsetWidth-12))+'px';card.style.top=y+'px'}
-function select(id,{route=false}={}){routeFocus=route;if(id)toggleReading(false);summaryGeneration++;selected=id;hovered=null;const p=state.papers.find(p=>p.id===id);$('#card').hidden=!p;if(p){$('#cardTitle').textContent=p.title;$('#summary').hidden=true;$('#summary').replaceChildren();$('#summarize').disabled=false;$('#summarize').textContent='Resumir artículo ↗';$('#card').getAnimations().forEach(a=>a.cancel());if(!reduced)$('#card').animate([{opacity:0,translate:'0 8px'},{opacity:1,translate:'0 0'}],{duration:350,easing:'ease-out'})}highlight();updateReading();paint(1/60)}
+function constrainCard(x,y){const wrap=$('.universe').getBoundingClientRect(),card=$('#card');return {x:Math.max(12,Math.min(x,Math.max(12,wrap.width-card.offsetWidth-12))),y:Math.max(12,Math.min(y,Math.max(12,wrap.height-card.offsetHeight-12)))}}
+function positionCard(){const p=projected.get(selected);if(!p)return;const card=$('#card'),manual=cardPlacements.get(selected);if(manual){const pos=constrainCard(manual.x,manual.y);cardPlacements.set(selected,pos);card.style.left=pos.x+'px';card.style.top=pos.y+'px';return}const graph=$('#graph'),wrap=$('.universe').getBoundingClientRect(),pt=graph.createSVGPoint();pt.x=p.sx;pt.y=p.sy;const screen=pt.matrixTransform(graph.getScreenCTM());let x=screen.x-wrap.left+42*p.scale,y=screen.y-wrap.top-35;
+ if(innerWidth<650){x=(wrap.width-card.offsetWidth)/2;y=Math.max(12,wrap.height-card.offsetHeight-55)}else if(x+card.offsetWidth>wrap.width-16)x=screen.x-wrap.left-card.offsetWidth-42*p.scale;const pos=constrainCard(x,y);card.style.left=pos.x+'px';card.style.top=pos.y+'px'}
+const card=$('#card');
+function endCardDrag(){cardDrag=null;card.classList.toggle('dragging',false)}
+card.addEventListener('pointerdown',e=>{if(!selected||(e.button!==undefined&&e.button!==0)||e.target.closest('button,a,input,select,textarea,#summary,#cardTitle'))return;e.preventDefault();e.stopPropagation();card.getAnimations().forEach(a=>a.cancel());cardDrag={id:selected,pointer:e.pointerId,startX:e.clientX,startY:e.clientY,x:parseFloat(card.style.left)||12,y:parseFloat(card.style.top)||12};card.classList.toggle('dragging',true);card.setPointerCapture(e.pointerId)});
+card.addEventListener('pointermove',e=>{if(!cardDrag||e.pointerId!==cardDrag.pointer)return;e.preventDefault();const pos=constrainCard(cardDrag.x+e.clientX-cardDrag.startX,cardDrag.y+e.clientY-cardDrag.startY);cardPlacements.set(cardDrag.id,pos);positionCard()});
+for(const event of ['pointerup','pointercancel','lostpointercapture'])card.addEventListener(event,endCardDrag);
+card.addEventListener('selectstart',e=>{if(cardDrag)e.preventDefault()});
+$('#cardDragHandle').addEventListener('keydown',e=>{const delta={ArrowLeft:[-1,0],ArrowRight:[1,0],ArrowUp:[0,-1],ArrowDown:[0,1]}[e.key];if(!delta||!selected)return;e.preventDefault();const step=e.shiftKey?30:10,pos=constrainCard((parseFloat(card.style.left)||12)+delta[0]*step,(parseFloat(card.style.top)||12)+delta[1]*step);cardPlacements.set(selected,pos);positionCard()});
+
+function select(id,{route=false}={}){endCardDrag();routeFocus=route;if(id)toggleReading(false);summaryGeneration++;selected=id;hovered=null;const p=state.papers.find(p=>p.id===id);$('#card').hidden=!p;if(p){$('#cardTitle').textContent=p.title;$('#summary').hidden=true;$('#summary').replaceChildren();$('#summarize').disabled=false;$('#summarize').textContent='Resumir artículo ↗';$('#card').getAnimations().forEach(a=>a.cancel());if(!reduced)$('#card').animate([{opacity:0,translate:'0 8px'},{opacity:1,translate:'0 0'}],{duration:350,easing:'ease-out'})}highlight();updateReading();paint(1/60)}
 function closeCard(){select(null)}$('#closeCard').onclick=closeCard;document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeCard();$('#graph').focus()}});
 $('#graph').addEventListener('pointerdown',e=>{if(e.button!==undefined&&e.button!==0)return;e.preventDefault();if(e.target.closest('.node,.edge'))return;drag={x:e.clientX,y:e.clientY,yaw:camera.yaw,pitch:camera.pitch,moved:false};$('#graph').setPointerCapture(e.pointerId)});$('#graph').addEventListener('pointermove',e=>{if(!drag)return;const dx=e.clientX-drag.x,dy=e.clientY-drag.y;if(Math.hypot(dx,dy)>4)drag.moved=true;camera.yaw=drag.yaw+dx*.006;camera.pitch=Math.max(-1.3,Math.min(1.3,drag.pitch+dy*.004));if(reduced)paint(1)});$('#graph').addEventListener('pointerup',e=>{if(drag&&!drag.moved&&!e.target.closest('.edge,.node'))closeCard();drag=null});$('#graph').addEventListener('pointercancel',()=>drag=null);$('#graph').addEventListener('lostpointercapture',()=>drag=null);for(const event of ['selectstart','dragstart'])$('#graph').addEventListener(event,e=>e.preventDefault());$('#graph').addEventListener('wheel',e=>{e.preventDefault();camera.zoom=Math.max(.45,Math.min(2.4,camera.zoom*Math.exp(-e.deltaY*.001)));if(reduced)paint(1)},{passive:false});$('#fit').onclick=()=>{camera={yaw:0,pitch:-.12,zoom:1};closeCard();if(reduced)paint(1)};
 function animate(t){const dt=Math.min(.05,(t-lastFrame)/1000||.016);lastFrame=t;if(!reduced&&!selected&&!hovered&&!drag)camera.yaw+=dt*.045;if(!document.hidden&&state.papers.length)paint(dt);requestAnimationFrame(animate)}if(!reduced)requestAnimationFrame(animate);new ResizeObserver(()=>{if(state.papers.length)paint(1)}).observe($('.universe'));

@@ -12,7 +12,7 @@ const grouped=groupByContent(fixture.results.map(r=>core.fromOpenAlex(r)));asser
 assert(suggestReadingPlan(fixture.results.map(r=>core.fromOpenAlex(r))).every(p=>!p.reason.includes('CA2')));
 const url=new URL(core.searchUrl('programming fundamentals','2'));assert.equal(url.hostname,'api.openalex.org');assert.equal(url.searchParams.get('page'),'2');assert.equal(url.searchParams.get('filter'),'language:en');assert(!url.searchParams.has('cursor'));
 assert(core.translationChunks('á '.repeat(1000)).every(s=>new TextEncoder().encode(s).length<=440));
-class Element{constructor(){this.children=[];this.attrs={};this.hidden=true;this.value='';this.handlers={};this.disabled=false;this.textContent=''}setAttribute(k,v){this.attrs[k]=String(v)}append(...items){this.children.push(...items)}replaceChildren(...items){this.children=items}addEventListener(k,v){this.handlers[k]=v}focus(){}showModal(){this.hidden=false}close(){this.hidden=true}}
+class Element{constructor(){this.children=[];this.attrs={};this.hidden=true;this.value='';this.handlers={};this.disabled=false;this.textContent=''}setAttribute(k,v){this.attrs[k]=String(v)}append(...items){this.children.push(...items)}replaceChildren(...items){this.children=items}addEventListener(k,v){this.handlers[k]=v}getBoundingClientRect(){return {left:100,top:100,right:900,bottom:700}}focus(){}showModal(){this.hidden=false}close(){this.hidden=true}}
 const page=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8'),els=new Map();for(const m of page.matchAll(/id="([^"]+)"/g))els.set('#'+m[1],new Element());els.get('#discoverInputLanguage').value='en';
 let library=[],requests=[],fetchMode='success',picked=null,graph=[],graphOptions=null;
 const mockFetch=async(url,options)=>{requests.push(url);if(String(url).includes('mymemory'))return {ok:true,json:async()=>({responseStatus:200,responseData:{translatedText:'I am looking for academic publications on programming fundamentals.'}})};
@@ -41,3 +41,6 @@ assert(core.learningSearchUrls('graph theory').every(u=>new URL(u).searchParams.
 els.get('#discoverInputLanguage').value='en';els.get('#discoverInput').value='graph theory';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
 els.get('#discoverLearning').onclick();assert.equal(els.get('#discoverLearning').attrs['aria-pressed'],'true');els.get('#discoverGraphCount').value='3';await els.get('#discoverCreateGraph').onclick();assert(graphOptions.learning);assert.equal(graph.length,3);assert.equal(learningLevel(graph[0]).level,0);
 console.log('Aprendizaje: búsqueda adicional, mezcla de niveles, fundamentos primero y ruta progresiva: correctos.');
+
+els.get('#discoverOpen').onclick();const modal=els.get('#discoverDialog');modal.handlers.pointerdown({target:modal,clientX:200,clientY:200,preventDefault(){}});assert.equal(modal.hidden,false);modal.handlers.pointerdown({target:modal,clientX:40,clientY:40,preventDefault(){}});assert.equal(modal.hidden,true);
+console.log('El buscador se cierra al pulsar en el fondo exterior y permanece abierto al pulsar dentro.');

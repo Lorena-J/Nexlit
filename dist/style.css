@@ -44,3 +44,5 @@ h1{margin-top:0;transform:translateY(-12px)}
 /* Rotating the graph is a gesture, never a text selection or native drag. */
 #graph,#graph *{-webkit-user-select:none;user-select:none;-webkit-user-drag:none}
 .article-card,.article-card h2,.article-card p,.article-card small{-webkit-user-select:text;user-select:text}
+
+.card-drag-handle{width:64px;height:23px;margin:-17px auto 12px;text-align:center;color:#8ca8ba;font-size:24px;line-height:23px;cursor:grab;touch-action:none;-webkit-user-select:none!important;user-select:none!important;border-radius:5px}.card-drag-handle:hover{color:#d0e9f2;background:#d0e9f20a}.card-drag-handle:focus-visible{outline:2px solid #b9e8f1;outline-offset:2px}.article-card.dragging{cursor:grabbing}.article-card.dragging .card-drag-handle{cursor:grabbing}
