@@ -1,5 +1,5 @@
-import {assessLearning,buildLearningPath} from './learning-core.js?v=20';
-export {buildLearningPath,learningOrderIssues} from './learning-core.js?v=20';
+import {assessLearning,buildLearningPath} from './learning-core.js?v=29';
+export {buildLearningPath,learningOrderIssues} from './learning-core.js?v=29';
 export function clean(s=''){return String(s).replace(/\\(?:textit|textbf|emph|mathrm)\s*/g,'').replace(/[{}]/g,'').replace(/\\&/g,'&').replace(/\s+/g,' ').trim()}
 export function parseBib(src){
  const papers=[],macros={};let i=0;
@@ -48,6 +48,8 @@ function validateLearningData(data,ids){
  const report=data.learningReport;
  if(report!==undefined&&report!==null){
   if(report.version!==1||typeof report.subject!=='string'||typeof report.target!=='string'||typeof report.complete!=='boolean'||!Array.isArray(report.gaps))throw Error('Invalid learning report.');
+  for(const key of ['requestedCount','candidateCount','eligibleCount','selectedCount'])if(report[key]!==undefined&&(!Number.isInteger(report[key])||report[key]<0))throw Error('Invalid learning counts.');
+  if(report.shortfall!==undefined&&typeof report.shortfall!=='string')throw Error('Invalid learning shortfall.');
   for(const gap of report.gaps)if(!gap||!Number.isInteger(gap.stage)||gap.stage<0||gap.stage>4||typeof gap.label!=='string'||typeof gap.reason!=='string')throw Error('Invalid learning gap.');
  }
 }

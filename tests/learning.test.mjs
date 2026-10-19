@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {assessLearning,buildLearningPath,learningOrderIssues} from '../dist/learning-core.js';
 import {compileQuery,learningSearchJobs,rankResults,selectLearningPapers} from '../dist/discovery-core.js';
 import {validateWorkspace} from '../dist/core.js';
-import {lessonPapers} from './fixtures/learning.mjs';
+import {lessonPapers,expandedLessonPapers} from './fixtures/learning.mjs';
 
 const context={subject:'graph theory',target:'"graph theory" AND transport',targetPaperIds:['applications','advanced']};
 const path=buildLearningPath([...lessonPapers].reverse(),context);
@@ -62,3 +62,30 @@ assert.deepEqual(validateWorkspace(structuredClone(workspace)),workspace);
 assert.throws(()=>validateWorkspace({...structuredClone(workspace),learningReport:{...report,gaps:[{stage:99,label:'Bad',reason:'Bad'}]}}));
 const bad=structuredClone(workspace);bad.readingPlan[1].requires=['missing'];assert.throws(()=>validateWorkspace(bad));
 console.log('Level-zero entry, objective dependencies, abstract evidence, partial paths, exclusions and persistence pass.');
+
+// Five stages must not impose a five-reading cap on a substantial candidate pool.
+const expandedContext={subject:'social recognition',target:'"social recognition"',targetPaperIds:expandedLessonPapers.map(p=>p.id),count:20};
+const expanded=buildLearningPath(expandedLessonPapers,expandedContext);
+assert.equal(expanded.steps.length,20);
+assert(expanded.complete);assert.equal(new Set(expanded.steps.map(step=>step.stage)).size,5);
+assert.equal(expanded.requestedCount,20);assert.equal(expanded.eligibleCount,25);
+assert.deepEqual(learningOrderIssues(expanded.steps),[]);
+assert(expanded.steps.slice(1).every((step,index)=>step.stage>=expanded.steps[index].stage));
+assert(expanded.steps.filter(step=>step.stage===1).length>1);
+assert(expanded.steps.filter(step=>step.stage===4).length>1);
+const full=buildLearningPath(expandedLessonPapers,{...expandedContext,count:40});
+assert.equal(full.steps.length,25);assert(full.shortfall);assert.equal(full.candidateCount,25);
+const duplicates=[...expandedLessonPapers,...expandedLessonPapers.map(p=>({...p,id:p.id+'-copy'}))];
+assert.equal(buildLearningPath(duplicates,{...expandedContext,count:40}).steps.length,25,'Repeated DOI/title records must not pad the route');
+const repeatedContent=[...lessonPapers,...Array.from({length:10},(_,i)=>({...lessonPapers[1],id:'copy-'+i,doi:'10.0000/copy-'+i,title:lessonPapers[1].title+' volume'+i}))];
+assert.equal(buildLearningPath(repeatedContent,{subject:'graph theory',count:20}).steps.length,5,'Cosmetic title variants with no new content must not pad the route');
+console.log('Expanded routes select 20 complementary readings across five stages and keep dependencies, order and deduplication.');
+
+// A later foundation can unlock a method even if the first foundation does not.
+const alternativeFoundation={...lessonPapers[1],id:'alternate-foundation',doi:'10.0000/alternate-foundation',title:'Basic Concepts of Graph Theory in Fluorescence',abstract:'This chapter explains the basic concepts of graph theory through fluorescence and spectroscopy, with elementary examples for interpreting laboratory networks.'};
+const linkedMethod={...lessonPapers[2],abstract:'This protocol describes methods for graph theory through fluorescence and spectroscopy measurements across laboratory networks and interpreting their outcomes.'};
+const linkedApplication={...lessonPapers[3],abstract:'This application of graph theory uses fluorescence and spectroscopy to model transport networks and interpret practical experimental observations.'};
+const alternative=buildLearningPath([lessonPapers[0],lessonPapers[1],alternativeFoundation,linkedMethod,linkedApplication,lessonPapers[4]],{...context,count:5});
+assert(alternative.complete);
+assert(alternative.steps.find(step=>step.id==='methods').requires.includes('alternate-foundation'));
+assert.deepEqual(learningOrderIssues(alternative.steps),[]);
