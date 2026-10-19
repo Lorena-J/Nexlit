@@ -25,13 +25,13 @@ els.get('#discoverOpen').onclick();els.get('#discoverInput').value='programming 
 let actions=els.get('#discoverResults').children[0].children.at(-1);actions.children[0].onclick();assert.equal(library.length,1);actions=els.get('#discoverResults').children[0].children.at(-1);assert(actions.children[0].disabled);actions.children[1].onclick();assert(picked);
 await els.get('#discoverMore').onclick();assert.equal(els.get('#discoverResults').children.length,3);
 els.get('#discoverGraphCount').value='2';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,2);assert(!els.get('#discoverSearch').disabled);
-graph=[];els.get('#discoverGraphCount').value='10';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,0);assert(els.get('#discoverStatus').textContent.includes('Solo hay 3'));
+graph=[];els.get('#discoverGraphCount').value='10';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,0);assert(els.get('#discoverStatus').textContent.includes('Only 3'));
 fetchMode='pages';await els.get('#discoverSearch').onclick();els.get('#discoverGraphCount').value='5';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,5);assert(graph.every(p=>p.language==='en'));
-fetchMode='failure';await els.get('#discoverSearch').onclick();assert(els.get('#discoverStatus').textContent.includes('disponible'));
-fetchMode='cancel';const pending=els.get('#discoverSearch').onclick();els.get('#discoverCancel').onclick();await pending;assert.equal(els.get('#discoverStatus').textContent,'Búsqueda cancelada.');
+fetchMode='failure';await els.get('#discoverSearch').onclick();assert(els.get('#discoverStatus').textContent.includes('unavailable'));
+fetchMode='cancel';const pending=els.get('#discoverSearch').onclick();els.get('#discoverCancel').onclick();await pending;assert.equal(els.get('#discoverStatus').textContent,'Search canceled.');
 fetchMode='success';els.get('#discoverInputLanguage').value='es';els.get('#discoverInput').value='bases de programación';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();const translatedSearch=new URL(requests.at(-1));assert.equal(translatedSearch.searchParams.get('search'),'programming fundamentals');assert(requests.some(u=>u.includes('mymemory')));assert(!requests.at(-1).includes('europepmc'));
-const merged=core.mergeDiscoveryBatch([{...paper,status:'Leído',notes:'Keep'}],[paper]);assert.equal(merged.papers[0].notes,'Keep');assert.equal(merged.papers[0].status,'Leído');
-console.log('Búsqueda multidisciplinar, español→inglés, temas genéricos, páginas sin clave, idioma, cantidad, cancelación y notas conservadas: correctos.');
+const merged=core.mergeDiscoveryBatch([{...paper,status:'Read',notes:'Keep'}],[paper]);assert.equal(merged.papers[0].notes,'Keep');assert.equal(merged.papers[0].status,'Read');
+console.log('Discovery: multidisciplinary search, Spanish translation, pagination, language, graph size, cancellation and note preservation pass.');
 
 const teaching=[{id:'f',title:'Introduction to Graph Theory'},{id:'v',title:'A Survey of Graph Theory',type:'review'},{id:'p',title:'Graph algorithms in transport'},{id:'a',title:'Advanced Graph Theory'}];
 const selected=core.selectLearningPapers(teaching,4);assert.equal(selected.papers.length,4);assert.equal(selected.papers[0].id,'f');assert.equal(selected.papers.at(-1).id,'a');
@@ -40,7 +40,7 @@ assert.equal(suggestReadingPlan(teaching,{fromScratch:true})[0].id,'f');
 assert(core.learningSearchUrls('graph theory').every(u=>new URL(u).searchParams.get('filter')==='language:en'));
 els.get('#discoverInputLanguage').value='en';els.get('#discoverInput').value='graph theory';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
 els.get('#discoverLearning').onclick();assert.equal(els.get('#discoverLearning').attrs['aria-pressed'],'true');els.get('#discoverGraphCount').value='3';await els.get('#discoverCreateGraph').onclick();assert(graphOptions.learning);assert.equal(graph.length,3);assert.equal(learningLevel(graph[0]).level,0);
-console.log('Aprendizaje: búsqueda adicional, mezcla de niveles, fundamentos primero y ruta progresiva: correctos.');
+console.log('Learning mode: extra searches, mixed levels, fundamentals first and progressive reading paths pass.');
 
 els.get('#discoverOpen').onclick();const modal=els.get('#discoverDialog');modal.handlers.pointerdown({target:modal,clientX:200,clientY:200,preventDefault(){}});assert.equal(modal.hidden,false);modal.handlers.pointerdown({target:modal,clientX:40,clientY:40,preventDefault(){}});assert.equal(modal.hidden,true);
-console.log('El buscador se cierra al pulsar en el fondo exterior y permanece abierto al pulsar dentro.');
+console.log('Search closes on backdrop clicks and stays open for clicks inside the dialog.');
