@@ -7,10 +7,10 @@ const exp=core.planSearch('CA2 del hipocampo, hembras head-fixed, orina, ChABC y
 assert(exp.concepts.some(c=>c.id==='chabc'));assert(exp.concepts.some(c=>c.id==='pnn'));assert(exp.query.includes(' OR '));
 assert(core.planSearch('hippocampus dopamine').query.includes('dopamine'));
 assert(core.planSearch('CA2 Shank3','experiment').query.includes('shank3'));
-const fixture={hitCount:3,resultList:{result:Array.from({length:3},(_,i)=>({id:String(i+1),source:i===0?'PPR':'MED',title:'Hippocampal CA2 test study '+i,pubYear:'2024',doi:'10.0000/atlas-test-'+i,abstractText:'<p>CA2 hippocampal test abstract.</p>',authorList:{author:[{lastName:'Example',firstName:'A'}]},journalInfo:{journal:{title:'Test journal'}}}))}};
+const fixture={hitCount:3,resultList:{result:Array.from({length:3},(_,i)=>({id:String(i+1),source:i===0?'PPR':'MED',language:'eng',title:'Hippocampal CA2 test study '+i,pubYear:'2024',doi:'10.0000/atlas-test-'+i,abstractText:'<p>CA2 hippocampal test abstract.</p>',authorList:{author:[{lastName:'Example',firstName:'A'}]},journalInfo:{journal:{title:'Test journal'}}}))}};
 const paper=core.fromEuropePMC(fixture.resultList.result[0]);assert(paper.title&&paper.doi&&paper.abstract);assert.equal(paper.status,'Pendiente');
 assert(core.samePaper(paper,{...paper,id:'another',doi:'https://doi.org/'+paper.doi.toUpperCase()}));
-assert.equal(new URL(core.searchUrl(area.query)).searchParams.get('query'),area.query);
+assert.equal(new URL(core.searchUrl(area.query)).searchParams.get('query'),'('+area.query+') AND LANG:eng');
 assert.equal(core.fromEuropePMC({title:'Missing id'}),null);
 class Element{
  constructor(){this.children=[];this.attrs={};this.hidden=true;this.value='';this.handlers={};this.disabled=false;this.textContent=''}
@@ -18,10 +18,10 @@ class Element{
  addEventListener(k,v){this.handlers[k]=v} focus(){} showModal(){this.hidden=false} close(){this.hidden=true}
 }
 const html=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8'),els=new Map();for(const m of html.matchAll(/id="([^"]+)"/g))els.set('#'+m[1],new Element());
-let library=[],requests=[],fetchMode='success',picked=null;
-const context=vm.createContext({core,document:{querySelector:s=>els.get(s),createElement:()=>new Element()},DOMParser:class{parseFromString(s){return {body:{textContent:s.replace(/<[^>]+>/g,'')}}}},AbortController,URL,setTimeout,clearTimeout,fetch:async(url,options)=>{requests.push(url);if(fetchMode==='failure')return {ok:false,status:503};if(fetchMode==='cancel')return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));return {ok:true,json:async()=>({...fixture,nextCursorMark:requests.length===1?'next-page':null})}},getPapers:()=>library,addPaper:p=>library.push(p),pickPaper:id=>picked=id});
-const source=readFileSync(new URL('../dist/discovery-ui.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'const {planSearch,matchConcepts,fromEuropePMC,samePaper,searchUrl}=core;\n').replace('export function setupDiscovery','function setupDiscovery');
-vm.runInContext(source+'\nsetupDiscovery({getPapers,addPaper,pickPaper});',context);
+let library=[],requests=[],fetchMode='success',picked=null,graph=[];
+const context=vm.createContext({core,document:{querySelector:s=>els.get(s),createElement:()=>new Element()},DOMParser:class{parseFromString(s){return {body:{textContent:s.replace(/<[^>]+>/g,'')}}}},AbortController,URL,setTimeout,clearTimeout,fetch:async(url,options)=>{requests.push(url);if(fetchMode==='failure')return {ok:false,status:503};if(fetchMode==='cancel')return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));if(fetchMode==='pages'){const more=new URL(url).searchParams.get('cursorMark')!=='*';return {ok:true,json:async()=>({hitCount:5,nextCursorMark:more?null:'page-two',resultList:{result:more?[...fixture.resultList.result,...[4,5].map(i=>({...fixture.resultList.result[0],id:String(i),title:'Additional English study '+i,doi:'10.0000/additional-'+i})),{...fixture.resultList.result[0],id:'fr',title:'French study',doi:'10.0000/french',language:'fre'}]:fixture.resultList.result}})}}return {ok:true,json:async()=>({...fixture,nextCursorMark:requests.length===1?'next-page':null})}},getPapers:()=>library,addPaper:p=>library.push(p),pickPaper:id=>picked=id,createGraph:papers=>graph=papers});
+const source=readFileSync(new URL('../dist/discovery-ui.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/,'const {planSearch,matchConcepts,fromEuropePMC,samePaper,searchUrl,isEnglishRecord}=core;\n').replace('export function setupDiscovery','function setupDiscovery');
+vm.runInContext(source+'\nsetupDiscovery({getPapers,addPaper,pickPaper,createGraph});',context);
 els.get('#discoverOpen').onclick();assert.equal(els.get('#discoverDialog').hidden,false);
 els.get('#discoverInput').value='CA2 del hipocampo';els.get('#discoverInput').oninput();
 await els.get('#discoverSearch').onclick();assert.equal(els.get('#discoverResults').children.length,3);
@@ -31,3 +31,15 @@ await els.get('#discoverMore').onclick();assert.equal(els.get('#discoverResults'
 fetchMode='failure';await els.get('#discoverSearch').onclick();assert(els.get('#discoverStatus').textContent.includes('disponible'));assert.equal(els.get('#discoverSearch').disabled,false);
 fetchMode='cancel';const pending=els.get('#discoverSearch').onclick();els.get('#discoverCancel').onclick();await pending;assert.equal(els.get('#discoverSearch').disabled,false);assert.equal(els.get('#discoverStatus').textContent,'Búsqueda cancelada.');
 console.log('Búsquedas por área y experimento, términos conservados, formato de Europe PMC, paginación, duplicados, importación, fallos y cancelación: correctos.');
+
+fetchMode='success';await els.get('#discoverSearch').onclick();
+els.get('#discoverGraphCount').value='2';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,2);assert.equal(els.get('#discoverDialog').hidden,true);assert.equal(els.get('#discoverSearch').disabled,false);
+graph=[];els.get('#discoverGraphCount').value='2.5';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,0);
+els.get('#discoverGraphCount').value='10';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,0);assert(els.get('#discoverStatus').textContent.includes('Solo hay 3'));
+assert(core.isEnglishRecord({language:'eng'}));assert(!core.isEnglishRecord({language:'fre'}));assert(!core.isEnglishRecord({}));
+const merged=core.mergeDiscoveryBatch([{...paper,status:'Leído',notes:'Keep me'}],[paper,{...paper,id:'second-alias'}]);assert.equal(merged.papers.length,1);assert.equal(merged.papers[0].notes,'Keep me');assert.equal(merged.papers[0].status,'Leído');assert.equal(merged.ids.length,1);
+console.log('Solo inglés, cantidad exacta, valores inválidos, resultados insuficientes y conservación de biblioteca/notas: correctos.');
+
+fetchMode='pages';await els.get('#discoverSearch').onclick();assert.equal(els.get('#discoverResults').children.length,3);
+els.get('#discoverGraphCount').value='5';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,5);assert(graph.every(p=>p.language==='eng'));assert.equal(els.get('#discoverSearch').disabled,false);
+console.log('Carga automática de páginas hasta alcanzar N; descarta artículos no ingleses y duplicados.');

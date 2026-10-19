@@ -1,3 +1,4 @@
+import {mergeDiscoveryBatch} from '../dist/discovery-core.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -26,8 +27,8 @@ elements.set('.universe',new Element());elements.get('#graph').append(new Elemen
 const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.meta.url),'utf8'));
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
 let animation,savedState;
-const context=vm.createContext({core,console,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
-const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;const setupDiscovery=()=>{};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
+const context=vm.createContext({core,console,discoveryConfig:null,discoveryMerge:mergeDiscoveryBatch,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(){}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
+const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;const mergeDiscoveryBatch=discoveryMerge;const setupDiscovery=config=>{discoveryConfig=config};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
 await vm.runInContext('(async()=>{'+source+'})()',context);
 const nodes=elements.get('#nodeLayer').children;
 assert.equal(nodes.length,11);
@@ -117,3 +118,9 @@ assert.equal(savedState.readingEnabled,true);assert.equal(JSON.stringify(savedSt
 assert(elements.get('#nodeLayer').children.some(n=>n.querySelector('.route-number').textContent!==''));
 assert(css.includes('#graph:focus{outline:none}'));
 console.log('Activar/desactivar sin perder la ruta, marcado leído fuera de ella, persistencia y foco del contenedor: correctos.');
+
+const previousLibrary=JSON.parse(JSON.stringify(savedState.papers)),previousPlan=JSON.stringify(savedState.readingPlan);
+context.discoveryConfig.createGraph(papers.slice(0,2));assert.equal(elements.get('#nodeLayer').children.length,2);assert.equal(savedState.papers.length,previousLibrary.length);assert.deepEqual(savedState.papers,previousLibrary);assert.equal(JSON.stringify(savedState.readingPlan),previousPlan);assert.equal(elements.get('#allLibrary').hidden,false);
+assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).graphPaperIds.length,2);
+elements.get('#allLibrary').onclick();assert.equal(elements.get('#nodeLayer').children.length,11);assert.equal(savedState.graphPaperIds,null);
+console.log('Grafo de N nodos, biblioteca completa conservada, ruta intacta y vuelta a todos los artículos: correctos.');

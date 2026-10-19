@@ -1,4 +1,4 @@
-import {normalizeDoi} from './core.js?v=7';
+import {normalizeDoi} from './core.js?v=8';
 const normalize=s=>String(s||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
 export const concepts=[
  {id:'ca2',label:'CA2 hipocampal',match:/\bca[ -]?2\b/,query:'(TITLE_ABS:CA2 AND TITLE_ABS:hippocamp*)'},
@@ -34,7 +34,10 @@ export function matchConcepts(paper,selected){const text=normalize(paper.title+'
 export function fromEuropePMC(record,strip=s=>String(s||'').replace(/<[^>]+>/g,' ')){
  if(!record.id||!record.title)return null;const authors=record.authorList?.author?.map(a=>a.lastName?[a.lastName,a.firstName||a.initials].filter(Boolean).join(', '):a.fullName).filter(Boolean).join(' and ')||record.authorString||'';
  const types=record.pubTypeList?.pubType||[];
- return {id:'epmc-'+record.source+'-'+record.id,type:types.some(t=>/review/i.test(t))?'review':'article',title:strip(record.title).trim(),authors,year:String(record.pubYear||record.firstPublicationDate?.slice(0,4)||''),journal:record.journalInfo?.journal?.title||record.journalTitle||'',doi:normalizeDoi(record.doi||''),url:'https://europepmc.org/article/'+encodeURIComponent(record.source||'MED')+'/'+encodeURIComponent(record.id),abstract:strip(record.abstractText||'').trim(),keywords:(record.keywordList?.keyword||[]).join(', '),status:'Pendiente',notes:'',references:[],lookup:'unqueried',discoverySource:'Europe PMC',preprint:record.source==='PPR'||types.some(t=>/preprint/i.test(t))};
+ return {id:'epmc-'+record.source+'-'+record.id,type:types.some(t=>/review/i.test(t))?'review':'article',title:strip(record.title).trim(),authors,year:String(record.pubYear||record.firstPublicationDate?.slice(0,4)||''),journal:record.journalInfo?.journal?.title||record.journalTitle||'',doi:normalizeDoi(record.doi||''),url:'https://europepmc.org/article/'+encodeURIComponent(record.source||'MED')+'/'+encodeURIComponent(record.id),abstract:strip(record.abstractText||'').trim(),keywords:(record.keywordList?.keyword||[]).join(', '),status:'Pendiente',notes:'',references:[],lookup:'unqueried',discoverySource:'Europe PMC',language:record.language||'',preprint:record.source==='PPR'||types.some(t=>/preprint/i.test(t))};
 }
 export function samePaper(a,b){if(a.doi&&b.doi&&normalizeDoi(a.doi)===normalizeDoi(b.doi))return true;if(a.id===b.id)return true;const title=s=>normalize(s).replace(/[^a-z0-9]/g,'');return !!a.title&&title(a.title)===title(b.title)}
-export function searchUrl(query,cursor='*'){const u=new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search');u.search=new URLSearchParams({query,format:'json',resultType:'core',pageSize:'20',cursorMark:cursor});return u.href}
+export function searchUrl(query,cursor='*'){const u=new URL('https://www.ebi.ac.uk/europepmc/webservices/rest/search');u.search=new URLSearchParams({query:'('+query+') AND LANG:eng',format:'json',resultType:'core',pageSize:'20',cursorMark:cursor});return u.href}
+
+export function isEnglishRecord(record){return ['eng','en','english'].includes(String(record.language||'').trim().toLowerCase())}
+export function mergeDiscoveryBatch(existing,incoming){const papers=[...existing],ids=[];for(const paper of incoming){let known=papers.find(p=>samePaper(p,paper));if(!known){let id=paper.id,n=2;while(papers.some(p=>p.id===id))id=paper.id+'-'+n++;known={...paper,id};papers.push(known)}if(!ids.includes(known.id))ids.push(known.id)}return {papers,ids}}
