@@ -15,14 +15,14 @@ Open [localhost:8000](http://localhost:8000). An example library loads automatic
 
 ## What you can do
 
-- Search English-language papers through OpenAlex, or import a BibTeX or Nexlit JSON library.
+- Search OpenAlex with Precise, Balanced or Exploratory mode; keep phrases in quotes and edit Boolean queries. You can also import BibTeX or Nexlit JSON libraries.
 - Rotate and zoom the graph, filter by topic, and open a node to explore a paper.
 - Build a reading path, reorder papers and track what you have read.
-- Use **Learn from scratch** to look for introductory materials before advanced papers.
+- Use **Learn from scratch** to build a staged path from orientation to advanced readings, with prerequisites and visible gaps. See [learning paths](docs/learning-paths.md).
 - Fetch abstracts and citation metadata from Crossref, and generate short extractive abstract summaries.
 - Export your library, including reading progress, as JSON.
 
-The interface and default search language are English. Spanish queries can optionally be translated through MyMemory.
+The interface and default search language are English. Spanish queries can optionally be translated through MyMemory. Graph creation compares a larger candidate pool and can return fewer nodes when too few matches are confirmed. See [how search works](docs/search.md) and the [evaluation checklist](docs/search-evaluation.md).
 
 ## Data and current limits
 

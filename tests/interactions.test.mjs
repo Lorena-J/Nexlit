@@ -1,3 +1,4 @@
+import {lessonPapers} from './fixtures/learning.mjs';
 import {mergeDiscoveryBatch} from '../dist/discovery-core.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -28,7 +29,7 @@ const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.met
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
 let animation,savedState;const docHandlers=new Map();
 const context=vm.createContext({core,console,discoveryConfig:null,discoveryMerge:mergeDiscoveryBatch,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(type,fn){if(!docHandlers.has(type))docHandlers.set(type,[]);docHandlers.get(type).push(fn)}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
-const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan}=core;const mergeDiscoveryBatch=discoveryMerge;const setupDiscovery=config=>{discoveryConfig=config};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
+const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan,buildLearningPath,learningOrderIssues}=core;const mergeDiscoveryBatch=discoveryMerge;const setupDiscovery=config=>{discoveryConfig=config};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
 await vm.runInContext('(async()=>{'+source+'})()',context);
 const nodes=elements.get('#nodeLayer').children;
 assert.equal(nodes.length,11);
@@ -125,7 +126,7 @@ assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).grap
 elements.get('#allLibrary').onclick();assert.equal(elements.get('#nodeLayer').children.length,11);assert.equal(savedState.graphPaperIds,null);
 console.log('Graph size, library preservation, reading path preservation and full-library reset pass.');
 
-context.discoveryConfig.createGraph(papers.slice(0,4),{learning:true});assert(savedState.learningMode);assert(savedState.readingEnabled);assert.equal(savedState.readingPlan.length,4);
+context.discoveryConfig.createGraph(lessonPapers,{learning:true,learningPath:core.buildLearningPath(lessonPapers,{subject:'graph theory'})});assert(savedState.learningMode);assert(savedState.readingEnabled);assert.equal(savedState.readingPlan.length,5);
 elements.get('#readingList').children[0].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);assert(elements.get('#edgeLayer').children.every(e=>e.attrs['stroke-opacity']==='0'));assert(elements.get('#edgeLayer').children.every(e=>e.style.pointerEvents==='none'));
 elements.get('#readingList').children[1].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);
 elements.get('#readingList').children.at(-1).children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,0);
@@ -146,3 +147,24 @@ assert.equal(elements.get('#readingPanel').hidden,true);assert.equal(movable.hid
 elements.get('#topicsToggle').onclick();for(const fn of docHandlers.get('pointerdown'))fn({target:{closest:s=>s==='.topic-filter'?elements.get('#topicsPanel'):null}});assert.equal(elements.get('#topicsPanel').hidden,false);
 for(const fn of docHandlers.get('pointerdown'))fn({target:{closest:()=>null}});assert.equal(elements.get('#topicsPanel').hidden,true);
 console.log('Card dragging, position bounds, keyboard movement and outside-click dismissal pass.');
+
+// Curriculum metadata survives save/import and flags broken prerequisite order.
+assert(savedState.learningReport.complete);
+assert.equal(core.validateWorkspace(JSON.parse(JSON.stringify(savedState))).readingPlan[1].requires[0],savedState.readingPlan[0].id);
+const curriculum=elements.get('#readingList').children;
+curriculum[0].children[1].children[3].children[2].onclick();
+assert(elements.get('#readingLearningStatus').textContent.includes('Review prerequisites'));
+elements.get('#readingList').children[0].children[1].children[3].children[3].onclick();
+assert(elements.get('#readingLearningStatus').textContent.includes('Review prerequisites'));
+const previousLearningState=JSON.stringify(savedState);
+context.discoveryConfig.createGraph([{...lessonPapers[4],id:'unsupported'}],{learning:true});
+assert.equal(JSON.stringify(savedState),previousLearningState,'An advanced-only request must keep the existing path');
+console.log('Curriculum export/import, reordering warnings and non-destructive rejection of advanced-only paths pass.');
+
+// Existing-library duplicates must remap both prerequisite and content-bridge identifiers.
+const aliases=lessonPapers.map(p=>({...p,id:p.id+'-alias'}));
+context.discoveryConfig.createGraph(aliases,{learning:true,learningPath:core.buildLearningPath(aliases,{subject:'graph theory'})});
+assert.deepEqual(savedState.readingPlan.map(step=>step.id),lessonPapers.map(p=>p.id));
+assert.equal(savedState.readingPlan[2].requires[0],'foundations');
+assert.equal(savedState.readingPlan[2].bridges[0].from,'foundations');
+assert.doesNotThrow(()=>core.validateWorkspace(JSON.parse(JSON.stringify(savedState))));

@@ -1,6 +1,6 @@
-import {mergeDiscoveryBatch} from './discovery-core.js?v=18';
-import {setupDiscovery} from './discovery-ui.js?v=18';
-import {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan} from './core.js?v=18';
+import {mergeDiscoveryBatch,compileQuery,rankResults} from './discovery-core.js?v=20';
+import {setupDiscovery} from './discovery-ui.js?v=20';
+import {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan,buildLearningPath,learningOrderIssues} from './core.js?v=20';
 // Keep the existing storage key so the rename preserves saved libraries.
 const $=s=>document.querySelector(s),NS='http://www.w3.org/2000/svg',KEY='atlas-library-v1';
 const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -39,17 +39,40 @@ function openReadingArticle(id,{route=false}={}){const plan=state.readingPlan||[
 function refreshRouteLink(){const layer=$('#routeLayer');layer.replaceChildren();routeLink=null;if(!state.readingEnabled||!routeFocus||!selected)return;const plan=state.readingPlan||[],index=plan.findIndex(item=>item.id===selected),next=index>=0?plan[index+1]?.id:null;if(next&&positions.has(selected)&&positions.has(next)){const line=svg('line',{class:'route-edge','marker-end':'url(#routeArrow)'});line.append(svg('title',{},'Next reading step; this is not a citation.'));layer.append(line);routeLink={source:selected,target:next,line}}}
 
 function updateReading(){const plan=state.readingPlan||[],byId=new Map(state.papers.map(p=>[p.id,p])),next=state.readingEnabled?plan.find(item=>byId.get(item.id)?.status!=='Read'):null;
+ const learningIssues=state.learningMode?learningOrderIssues(plan):[];
+ const coveredGoals=new Set(plan.filter(item=>['orientation','foundations','methods','applications','advanced'].includes(item.goalId)).map(item=>item.goalId));
+ const incomplete=state.learningMode&&(coveredGoals.size<5||learningIssues.length>0);
+ $('#readingLearningStatus').hidden=!state.learningMode;
+ if(state.learningMode){
+  const gaps=state.learningReport?.gaps||[];
+  $('#readingLearningStatus').textContent=!state.learningReport?'This earlier learning path has not been assessed for prerequisites. Suggest a new path to review it.':learningIssues.length?learningIssues.join(' '):incomplete?'Partial learning path. '+(gaps[0]?gaps[0].label+': '+gaps[0].reason:'A stage has been removed or is still missing.'):'All five planned stages have readings. Teaching roles and prerequisites are estimates from abstracts.';
+ }
  $('#readingSwitch').checked=!!state.readingEnabled;$('#readingCount').textContent=plan.length?(state.readingEnabled?String(plan.length):'Paused'):'';$('#readingEmpty').hidden=!!plan.length;$('#continueReading').disabled=!next;$('#continueReading').textContent=!state.readingEnabled?'Path paused':plan.length&&!next?'Completed ✓':'Continue ↗';const done=plan.filter(item=>byId.get(item.id)?.status==='Read').length;$('#readingProgress').textContent=plan.length?`${done} of ${plan.length} read`:'';
+ if(incomplete&&plan.length&&!next&&state.readingEnabled)$('#continueReading').textContent='Read · gaps remain';
  const list=$('#readingList');list.replaceChildren();plan.forEach((item,index)=>{const p=byId.get(item.id);if(!p)return;const li=html('li',{class:'reading-item'+(p.status==='Read'?' done':'')});const number=html('button',{class:'reading-number','aria-label':'Go to step '+(index+1)},String(index+1));number.onclick=()=>openReadingArticle(p.id,{route:true});li.append(number);const content=html('div');const title=html('button',{class:'reading-title'},p.title);title.onclick=()=>openReadingArticle(p.id,{route:true});content.append(title,html('span',{class:'reading-meta'},firstAuthor(p)+' · '+(p.year||'n.d.')),html('span',{class:'reading-reason'},item.reason));
  const controls=html('div',{class:'reading-row-actions'}),label=html('label'),check=html('input',{type:'checkbox','aria-label':'Mark as read: '+p.title});check.checked=p.status==='Read';check.onchange=()=>{p.status=check.checked?'Read':'Unread';save();updateReading()};label.append(check,html('span',{},'Read'));controls.append(label);
  for(const [direction,icon,name]of [[-1,'↑','Move up'],[1,'↓','Move down']]){const move=html('button',{'aria-label':name+': '+p.title},icon);move.disabled=index+direction<0||index+direction>=plan.length;move.onclick=()=>{const target=index+direction;if(target<0||target>=plan.length)return;[plan[index],plan[target]]=[plan[target],plan[index]];save();updateReading()};controls.append(move)}
- const remove=html('button',{'aria-label':'Remove from path: '+p.title},'×');remove.onclick=()=>{state.readingPlan=plan.filter(entry=>entry.id!==p.id);save();updateReading()};controls.append(remove);content.append(controls);li.append(content);list.append(li)});
+ const remove=html('button',{'aria-label':'Remove from path: '+p.title},'×');remove.onclick=()=>{state.readingPlan=plan.filter(entry=>entry.id!==p.id);save();updateReading()};controls.append(remove);content.append(controls);
+ if(item.evidence){const details=html('details',{class:'reading-evidence'});details.append(html('summary',{},'Why this reading? · '+item.stageLabel),html('p',{},item.evidence));content.append(details)}
+ li.append(content);list.append(li)});
  for(const [id,g]of nodeEls){const index=plan.findIndex(item=>item.id===id);g.querySelector('.route-number').textContent=state.readingEnabled&&index>=0?String(index+1):'';g.classList.toggle('route-next',id===next?.id);const p=byId.get(id),read=p?.status==='Read';g.querySelector('.read-check').textContent=read?'✓':'';g.setAttribute('aria-label',(p?.title||id)+(read?' · Read':''))}
  const current=byId.get(selected),isRead=current?.status==='Read';$('#markRead').textContent=isRead?'Read ✓':'Mark as read';$('#markRead').setAttribute('aria-pressed',String(isRead));
  const at=plan.findIndex(item=>item.id===selected);$('#addReading').textContent=at>=0?`In your path · ${at+1} ↗`:'Add to my path ＋';refreshRouteLink();highlight();paint(1/60);
 }
 $('#suggestReading').title='Suggested by topic, publication type and year; you can edit it.';
-$('#suggestReading').onclick=()=>{if(!state.papers.length){notice('Import a bibliography first.');return}if(state.readingPlan?.length&&!confirm('Replace the current order with a new suggestion for the visible topics?'))return;state.readingPlan=suggestReadingPlan(shownPapers(),{fromScratch:!!state.learningMode});state.readingEnabled=true;save();updateReading()};
+$('#suggestReading').onclick=()=>{
+ if(!state.papers.length){notice('Import a bibliography first.');return}
+ if(state.readingPlan?.length&&!confirm('Replace the current order with a new suggestion for the visible topics?'))return;
+ if(state.learningMode){
+  const context=state.learningReport||{subject:shownPapers()[0]?.topic?.label||'',target:''};
+  let targetPaperIds=null;
+  try{if(context.target)targetPaperIds=rankResults(shownPapers(),compileQuery(context.target)).filter(item=>item.eligible).map(item=>item.p.id)}catch{notice('Review the saved learning query before suggesting a new path.');return}
+  const report=buildLearningPath(shownPapers(),{...context,targetPaperIds});
+  if(!report.steps.length){notice('No supported beginner entry was found. Search for foundation readings first.');return}
+  state.readingPlan=report.steps;state.learningReport={version:1,subject:report.subject,target:report.target,gaps:report.gaps,complete:report.complete};
+ }else state.readingPlan=suggestReadingPlan(shownPapers());
+ state.readingEnabled=true;save();updateReading();
+};
 $('#continueReading').onclick=()=>{if(!state.readingEnabled)return;const next=state.readingPlan?.find(item=>state.papers.find(p=>p.id===item.id)?.status!=='Read');if(next)openReadingArticle(next.id,{route:true})};
 $('#addReading').onclick=()=>{if(!selected)return;state.readingPlan??=[];if(state.readingPlan.some(item=>item.id===selected)){toggleReading(true);return}if(!state.readingPlan.length)state.readingEnabled=true;state.readingPlan.push({id:selected,reason:'Added by you.'});save();updateReading()};
 $('#readingSwitch').onchange=()=>{state.readingEnabled=$('#readingSwitch').checked;save();updateReading()};
@@ -93,5 +116,17 @@ $('#file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{i
 $('#export').onclick=()=>{if(!state.papers.length){notice('Import a bibliography first.');return}const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));html('a',{href:url,download:'nexlit-library.json'}).click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
 $('#enrich').onclick=async()=>{if(busy)return;const papers=state.papers.filter(p=>p.doi&&p.lookup!=='ok');if(!papers.length){notice('Metadata is up to date.');return}busy=true;$('#enrich').disabled=true;$('#file').disabled=true;const rev=revision;let failed=0;try{for(let i=0;i<papers.length;i++){notice(`Updating ${i+1}/${papers.length}…`);try{await fetchMetadata(papers[i])}catch{papers[i].lookup='error';failed++}if(rev!==revision)break;save()}if(rev===revision)rebuild();notice(failed?`Metadata is unavailable for ${failed} references.`:'Metadata is up to date.')}finally{busy=false;$('#enrich').disabled=false;$('#file').disabled=false}};
 $('#allLibrary').onclick=()=>{state.graphPaperIds=null;chosenTopics.clear();save();rebuild(true)};
-setupDiscovery({getPapers:()=>state.papers,addPaper:paper=>{const duplicate=state.papers.find(p=>(p.doi&&paper.doi&&normalizeDoi(p.doi)===normalizeDoi(paper.doi))||p.id===paper.id||p.title.toLowerCase()===paper.title.toLowerCase());if(duplicate)return duplicate;let id=paper.id,suffix=2;while(state.papers.some(p=>p.id===id))id=paper.id+'-'+suffix++;const added={...paper,id};state.papers.push(added);save();rebuild(true);return added},createGraph:(incoming,{learning=false}={})=>{const merged=mergeDiscoveryBatch(state.papers,incoming);state.papers=merged.papers;state.graphPaperIds=merged.ids;state.learningMode=learning;if(learning){state.readingPlan=suggestReadingPlan(merged.ids.map(id=>state.papers.find(p=>p.id===id)),{fromScratch:true});state.readingEnabled=true}routeFocus=false;chosenTopics.clear();selected=null;summaryGeneration++;$('#card').hidden=true;save();rebuild(true);notice('Graph created with '+merged.ids.length+' papers.')},pickPaper:id=>openReadingArticle(id)});
+setupDiscovery({getPapers:()=>state.papers,addPaper:paper=>{const duplicate=state.papers.find(p=>(p.doi&&paper.doi&&normalizeDoi(p.doi)===normalizeDoi(paper.doi))||p.id===paper.id||p.title.toLowerCase()===paper.title.toLowerCase());if(duplicate)return duplicate;let id=paper.id,suffix=2;while(state.papers.some(p=>p.id===id))id=paper.id+'-'+suffix++;const added={...paper,id};state.papers.push(added);save();rebuild(true);return added},createGraph:(incoming,{learning=false,learningPath=null}={})=>{
+ const report=learning?(learningPath||buildLearningPath(incoming,{subject:incoming[0]?.topic?.label||''})):null;
+ if(learning&&!report.steps.length){notice('No supported beginner entry was found. The existing library and path were kept.');return}
+ const merged=mergeDiscoveryBatch(state.papers,incoming);
+ const mappedId=id=>{const p=incoming.find(item=>item.id===id);return merged.papers.find(known=>known.id===id||(p?.doi&&normalizeDoi(known.doi)===normalizeDoi(p.doi))||(p?.title&&known.title.toLowerCase()===p.title.toLowerCase()))?.id};
+ state.papers=merged.papers;state.graphPaperIds=merged.ids;state.learningMode=learning;
+ if(learning){
+  state.readingPlan=report.steps.map(step=>({...step,id:mappedId(step.id),requires:step.requires.map(mappedId),bridges:(step.bridges||[]).map(bridge=>({...bridge,from:mappedId(bridge.from)}))}));
+  state.learningReport={version:1,subject:report.subject,target:report.target,gaps:report.gaps,complete:report.complete};state.readingEnabled=true;
+ }
+ routeFocus=false;chosenTopics.clear();selected=null;summaryGeneration++;$('#card').hidden=true;save();rebuild(true);
+ notice(learning?'Learning path created with '+state.readingPlan.length+' readings.'+(report.complete?'':' A prerequisite stage is missing; review the path details.'):'Graph created with '+merged.ids.length+' papers.');
+},pickPaper:id=>openReadingArticle(id)});
 try{const saved=localStorage.getItem(KEY);if(saved)replace(validateWorkspace(JSON.parse(saved)),false);else await demo()}catch{rebuild();notice('Could not restore the library. Import a JSON backup.')}

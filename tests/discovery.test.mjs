@@ -1,3 +1,5 @@
+import * as learningCore from '../dist/learning-core.js';
+import {lessonPapers,asOpenAlex} from './fixtures/learning.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -6,7 +8,7 @@ import {groupByContent,suggestReadingPlan,learningLevel} from '../dist/core.js';
 for(const text of ['bases de programación','medieval history','macroeconomics inflation','solar energy','CA2 hippocampus']){
  const q=core.planSearch(text);assert(q.query);if(!/ca2/i.test(text))assert(!/ca2|hippocamp|perineuronal|TITLE_ABS/i.test(q.query));
 }
-const fixture={meta:{count:25,page:1},results:Array.from({length:3},(_,i)=>({id:'https://openalex.org/W'+i,title:['Programming Fundamentals','Medieval trade networks','Inflation and economic policy'][i],language:'en',publication_year:2024,doi:'https://doi.org/10.0000/test-'+i,abstract_inverted_index:{Test:[0],abstract:[1]},primary_topic:{id:'https://openalex.org/T'+i,display_name:['Programming Education','Medieval History','Macroeconomics'][i]},authorships:[{author:{display_name:'Alice Example'}}]}))};
+const fixture={meta:{count:25,page:1},results:Array.from({length:3},(_,i)=>({id:'https://openalex.org/W'+i,title:['Introduction to Programming Fundamentals','A Survey of Programming Fundamentals','Advanced Programming Fundamentals'][i],language:'en',publication_year:2024,doi:'https://doi.org/10.0000/test-'+i,abstract_inverted_index:{Test:[0],abstract:[1]},primary_topic:{id:'https://openalex.org/T'+i,display_name:['Programming Education','Medieval History','Macroeconomics'][i]},authorships:[{author:{display_name:'Alice Example'}}]}))};
 const paper=core.fromOpenAlex(fixture.results[0]);assert.equal(paper.abstract,'Test abstract');assert.equal(paper.topic.label,'Programming Education');assert(core.samePaper(paper,{...paper,id:'alias'}));
 const grouped=groupByContent(fixture.results.map(r=>core.fromOpenAlex(r)));assert.equal(grouped.groups.length,3);assert(!grouped.groups.some(g=>/social|neuro/i.test(g.label)));
 assert(suggestReadingPlan(fixture.results.map(r=>core.fromOpenAlex(r))).every(p=>!p.reason.includes('CA2')));
@@ -17,30 +19,84 @@ const page=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8'),el
 let library=[],requests=[],fetchMode='success',picked=null,graph=[],graphOptions=null;
 const mockFetch=async(url,options)=>{requests.push(url);if(String(url).includes('mymemory'))return {ok:true,json:async()=>({responseStatus:200,responseData:{translatedText:'I am looking for academic publications on programming fundamentals.'}})};
  if(fetchMode==='failure')return {ok:false,status:503};if(fetchMode==='cancel')return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));
- const number=Number(new URL(url).searchParams.get('page'));return {ok:true,json:async()=>({meta:{count:25,page:number},results:fetchMode==='pages'&&number===2?[...fixture.results,...[4,5].map(i=>({...fixture.results[0],id:'https://openalex.org/W'+i,doi:'10.0000/extra-'+i,title:'Additional English publication '+i})),{...fixture.results[0],id:'https://openalex.org/Wfr',language:'fr'}]:fixture.results})};
+ if(['learning','learning-empty','learning-cancel'].includes(fetchMode)){
+  const titleQuery=new URL(url).searchParams.get('search.title')||'';
+  if(titleQuery&&fetchMode==='learning-cancel')return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));
+  if(titleQuery&&fetchMode==='learning-empty')return {ok:true,json:async()=>({meta:{count:0,page:1},results:[]})};
+  const stage=titleQuery.includes('introductory')?0:titleQuery.includes('fundamentals')?1:titleQuery.includes('methods')?2:titleQuery.includes('applications')?3:4;
+  return {ok:true,json:async()=>({meta:{count:1,page:1},results:[asOpenAlex(lessonPapers[stage])]})};
+ }
+ const number=Number(new URL(url).searchParams.get('page'));
+ if(fetchMode==='pool'||fetchMode==='pool-cancel'){
+  if(fetchMode==='pool-cancel'&&number>1)return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));
+  return {ok:true,json:async()=>({meta:{count:100,page:number},results:Array.from({length:20},(_,offset)=>{const i=(number-1)*20+offset;return {...fixture.results[0],id:'https://openalex.org/Pool'+i,doi:'10.0000/pool-'+i,title:'Programming fundamentals topic '+i,relevance_score:i===45?1000:1}})})};
+ }
+ return {ok:true,json:async()=>({meta:{count:25,page:number},results:fetchMode==='pages'&&number===2?[...fixture.results,...[4,5].map(i=>({...fixture.results[0],id:'https://openalex.org/W'+i,doi:'10.0000/extra-'+i,title:'Programming Fundamentals applications '+i})),{...fixture.results[0],id:'https://openalex.org/Wfr',language:'fr'}]:fixture.results})};
 };
-const context=vm.createContext({learningLevel,core:{...core,translateQuery:(text,options)=>core.translateQuery(text,{...options,fetcher:mockFetch})},document:{querySelector:s=>els.get(s),createElement:()=>new Element()},DOMParser:class{parseFromString(s){return {body:{textContent:s.replace(/<[^>]+>/g,'')}}}},AbortController,URL,setTimeout,clearTimeout,fetch:mockFetch,getPapers:()=>library,addPaper:p=>library.push(p),pickPaper:id=>picked=id,createGraph:(papers,options)=>{graph=papers;graphOptions=options}});
-const source="const {planSearch,matchConcepts,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchUrls,selectLearningPapers}=core;\n"+readFileSync(new URL('../dist/discovery-ui.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace('export function setupDiscovery','function setupDiscovery');vm.runInContext(source+'\nsetupDiscovery({getPapers,addPaper,pickPaper,createGraph});',context);
+const context=vm.createContext({learningCore,learningLevel,core:{...core,translateQuery:(text,options)=>core.translateQuery(text,{...options,fetcher:mockFetch})},document:{querySelector:s=>els.get(s),createElement:()=>new Element()},DOMParser:class{parseFromString(s){return {body:{textContent:s.replace(/<[^>]+>/g,'')}}}},AbortController,URL,setTimeout,clearTimeout,fetch:mockFetch,getPapers:()=>library,addPaper:p=>library.push(p),pickPaper:id=>picked=id,createGraph:(papers,options)=>{graph=papers;graphOptions=options}});
+const source="const {planSearch,compileQuery,rankResults,candidateTarget,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchJobs}=core;const {buildLearningPath,learningGoals}=learningCore;\n"+readFileSync(new URL('../dist/discovery-ui.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace('export function setupDiscovery','function setupDiscovery');vm.runInContext(source+'\nsetupDiscovery({getPapers,addPaper,pickPaper,createGraph});',context);
 els.get('#discoverOpen').onclick();els.get('#discoverInput').value='programming fundamentals';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();assert.equal(els.get('#discoverResults').children.length,3);
 let actions=els.get('#discoverResults').children[0].children.at(-1);actions.children[0].onclick();assert.equal(library.length,1);actions=els.get('#discoverResults').children[0].children.at(-1);assert(actions.children[0].disabled);actions.children[1].onclick();assert(picked);
 await els.get('#discoverMore').onclick();assert.equal(els.get('#discoverResults').children.length,3);
 els.get('#discoverGraphCount').value='2';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,2);assert(!els.get('#discoverSearch').disabled);
-graph=[];els.get('#discoverGraphCount').value='10';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,0);assert(els.get('#discoverStatus').textContent.includes('Only 3'));
+graph=[];els.get('#discoverGraphCount').value='10';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,3,'Create a smaller graph instead of filling it with unrelated papers');
 fetchMode='pages';await els.get('#discoverSearch').onclick();els.get('#discoverGraphCount').value='5';await els.get('#discoverCreateGraph').onclick();assert.equal(graph.length,5);assert(graph.every(p=>p.language==='en'));
 fetchMode='failure';await els.get('#discoverSearch').onclick();assert(els.get('#discoverStatus').textContent.includes('unavailable'));
 fetchMode='cancel';const pending=els.get('#discoverSearch').onclick();els.get('#discoverCancel').onclick();await pending;assert.equal(els.get('#discoverStatus').textContent,'Search canceled.');
-fetchMode='success';els.get('#discoverInputLanguage').value='es';els.get('#discoverInput').value='bases de programación';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();const translatedSearch=new URL(requests.at(-1));assert.equal(translatedSearch.searchParams.get('search'),'programming fundamentals');assert(requests.some(u=>u.includes('mymemory')));assert(!requests.at(-1).includes('europepmc'));
+fetchMode='success';els.get('#discoverInputLanguage').value='es';els.get('#discoverInput').value='bases de programación';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();const translatedSearch=new URL(requests.at(-1));assert.equal(translatedSearch.searchParams.get('search.title_abstract_keywords'),'programming AND fundamentals');assert(requests.some(u=>u.includes('mymemory')));assert(!requests.at(-1).includes('europepmc'));
 const merged=core.mergeDiscoveryBatch([{...paper,status:'Read',notes:'Keep'}],[paper]);assert.equal(merged.papers[0].notes,'Keep');assert.equal(merged.papers[0].status,'Read');
 console.log('Discovery: multidisciplinary search, Spanish translation, pagination, language, graph size, cancellation and note preservation pass.');
 
-const teaching=[{id:'f',title:'Introduction to Graph Theory'},{id:'v',title:'A Survey of Graph Theory',type:'review'},{id:'p',title:'Graph algorithms in transport'},{id:'a',title:'Advanced Graph Theory'}];
-const selected=core.selectLearningPapers(teaching,4);assert.equal(selected.papers.length,4);assert.equal(selected.papers[0].id,'f');assert.equal(selected.papers.at(-1).id,'a');
-assert(core.selectLearningPapers(teaching.slice(1),3).missingBasics);
-assert.equal(suggestReadingPlan(teaching,{fromScratch:true})[0].id,'f');
+const teaching=lessonPapers;
+const selected=core.selectLearningPapers(teaching,5,{subject:'graph theory'});assert.equal(selected.papers.length,5);assert.equal(selected.papers[0].id,'orientation');assert.equal(selected.papers.at(-1).id,'advanced');
+assert(core.selectLearningPapers(teaching.slice(1),5,{subject:'graph theory'}).missingBasics);
+assert.equal(suggestReadingPlan(teaching,{fromScratch:true,subject:'graph theory'})[0].id,'orientation');
 assert(core.learningSearchUrls('graph theory').every(u=>new URL(u).searchParams.get('filter')==='language:en'));
-els.get('#discoverInputLanguage').value='en';els.get('#discoverInput').value='graph theory';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
-els.get('#discoverLearning').onclick();assert.equal(els.get('#discoverLearning').attrs['aria-pressed'],'true');els.get('#discoverGraphCount').value='3';await els.get('#discoverCreateGraph').onclick();assert(graphOptions.learning);assert.equal(graph.length,3);assert.equal(learningLevel(graph[0]).level,0);
-console.log('Learning mode: extra searches, mixed levels, fundamentals first and progressive reading paths pass.');
+fetchMode='learning';els.get('#discoverInputLanguage').value='en';els.get('#discoverInput').value='"graph theory" AND transport';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
+els.get('#discoverFoundation').value='graph theory';
+els.get('#discoverLearning').onclick();assert.equal(els.get('#discoverLearning').attrs['aria-pressed'],'true');els.get('#discoverGraphCount').value='5';
+const learningStart=requests.length;await els.get('#discoverCreateGraph').onclick();assert(graphOptions.learning);assert.equal(graph.length,5);assert.equal(learningLevel(graph[0]).level,0);
+assert(graphOptions.learningPath.complete);
+const foundationQuery=new URL(requests[learningStart]).searchParams.get('search.title_abstract_keywords');assert(!foundationQuery.includes('transport'),'Foundation search must broaden beyond the narrow target');
+assert.equal(graphOptions.learningPath.steps[1].requires[0],graph[0].id);
+assert.equal(els.get('#discoverLearningPlan').hidden,false);
+console.log('Learning mode: curriculum-driven foundation searches, five stages, prerequisites and explanations pass.');
+// No beginner evidence must not replace the previously created graph.
+fetchMode='learning-empty';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
+const completeLearningGraph=graph;await els.get('#discoverCreateGraph').onclick();
+assert.equal(graph,completeLearningGraph);assert(els.get('#discoverStatus').textContent.includes('No supported beginner entry'));
+fetchMode='learning-cancel';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
+const canceledLearning=els.get('#discoverCreateGraph').onclick();els.get('#discoverCancel').onclick();await canceledLearning;
+assert.equal(graph,completeLearningGraph);assert(!els.get('#discoverFoundation').disabled);assert(!els.get('#discoverSearch').disabled);
+assert.equal(els.get('#discoverStatus').textContent,'Search canceled.');
+fetchMode='success';
 
 els.get('#discoverOpen').onclick();const modal=els.get('#discoverDialog');modal.handlers.pointerdown({target:modal,clientX:200,clientY:200,preventDefault(){}});assert.equal(modal.hidden,false);modal.handlers.pointerdown({target:modal,clientX:40,clientY:40,preventDefault(){}});assert.equal(modal.hidden,true);
 console.log('Search closes on backdrop clicks and stays open for clicks inside the dialog.');
+
+// Graph selection must compare beyond the first page and retain late relevant papers.
+fetchMode='pool';els.get('#discoverLearning').onclick();
+els.get('#discoverBreadth').value='precise';els.get('#discoverInputLanguage').value='en';els.get('#discoverInput').value='programming fundamentals';els.get('#discoverInput').oninput();
+const start=requests.length;await els.get('#discoverSearch').onclick();
+els.get('#discoverCandidateCount').value='100';els.get('#discoverGraphCount').value='5';await els.get('#discoverCreateGraph').onclick();
+assert.equal(graph.length,5);assert.equal(graph[0].id,'openalex-Pool45');
+assert.deepEqual(requests.slice(start).map(url=>Number(new URL(url).searchParams.get('page'))),[1,2,3,4,5]);
+
+// Canceling the expansion must not create a graph or leave controls locked.
+fetchMode='pool-cancel';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();
+const previousGraph=graph;const expansion=els.get('#discoverCreateGraph').onclick();els.get('#discoverCancel').onclick();await expansion;
+assert.equal(graph,previousGraph);assert(!els.get('#discoverSearch').disabled);assert(!els.get('#discoverCandidateCount').disabled);
+assert.equal(els.get('#discoverStatus').textContent,'Search canceled.');
+
+// Edited Boolean syntax survives submission; editing invalidates the previous graph candidates.
+fetchMode='success';els.get('#discoverQuery').value='programming AND fundamentals NOT medieval';els.get('#discoverQuery').oninput();
+assert.equal(els.get('#discoverGraphTools').hidden,true);
+await els.get('#discoverSearch').onclick();
+assert.equal(new URL(requests.at(-1)).searchParams.get('search.title_abstract_keywords'),'programming AND fundamentals NOT medieval');
+
+// A translated query stays English when searched again; do not translate it twice.
+els.get('#discoverInputLanguage').value='es';els.get('#discoverInput').value='bases de programación';els.get('#discoverInput').oninput();
+await els.get('#discoverSearch').onclick();const translations=requests.filter(url=>url.includes('mymemory')).length;
+await els.get('#discoverSearch').onclick();assert.equal(requests.filter(url=>url.includes('mymemory')).length,translations);
+assert.equal(new URL(requests.at(-1)).searchParams.get('search.title_abstract_keywords'),'programming AND fundamentals');
+console.log('Candidate expansion, late relevance, cancellation, query invalidation and repeated translated queries pass.');

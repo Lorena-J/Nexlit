@@ -1,33 +1,200 @@
-import {learningLevel} from './core.js?v=18';
-import {planSearch,matchConcepts,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchUrls,selectLearningPapers} from './discovery-core.js?v=18';
+import {buildLearningPath,learningGoals} from './learning-core.js?v=20';
+import {learningLevel} from './core.js?v=20';
+import {planSearch,compileQuery,rankResults,candidateTarget,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchJobs} from './discovery-core.js?v=20';
+
 export function setupDiscovery({getPapers,addPaper,pickPaper,createGraph}){
- const $=s=>document.querySelector(s),dialog=$('#discoverDialog');let mode='area',controller=null,requestId=0,results=[],nextCursor=null,total=0,activeQuery='',activeConcepts=[],building=false,buildId=0,preparedEnglish=false,queryEdited=false,learning=false;
+ const $=s=>document.querySelector(s),dialog=$('#discoverDialog');
+ let mode='area',controller=null,operation=0,results=[],nextPage=null,total=0,activePlan=null,building=false,learning=false,queryEdited=false,queryEnglish=true,loadedQuery='',loadedScope='',loadedLanguage='',foundationAuto='',learningReport=null;
+ const scope=()=>$('#discoverBreadth').value||'balanced';
  const el=(tag,attrs={},text)=>{const n=document.createElement(tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n};
- function strip(s){return new DOMParser().parseFromString(String(s||''),'text/html').body.textContent||''}
- function status(text){$('#discoverStatus').textContent=text}
- function proposal(){preparedEnglish=$('#discoverInputLanguage').value==='en';queryEdited=false;const plan=planSearch($('#discoverInput').value,mode,$('#discoverBreadth').value==='strict');$('#discoverQuery').value=preparedEnglish?plan.query:$('#discoverInput').value.trim();$('#discoverConcepts').replaceChildren(...plan.concepts.map(c=>el('span',{},c.label)));return plan}
- function setMode(value){mode=value;$('#modeArea').setAttribute('aria-pressed',String(mode==='area'));$('#modeExperiment').setAttribute('aria-pressed',String(mode==='experiment'));$('#discoverPrompt').textContent=mode==='area'?'What would you like to explore?':'Describe your project or research';$('#discoverInput').placeholder=mode==='area'?'For example: programming fundamentals, medieval history or solar energy':'For example: I want to compare two programming teaching methods and evaluate how they affect learning.';proposal()}
- function cancel(){const active=!!controller||building;buildId++;building=false;if(controller){controller.abort();controller=null;requestId++}$('#discoverGraphCount').disabled=false;$('#discoverCreateGraph').disabled=false;$('#discoverSearch').disabled=false;$('#discoverCancel').hidden=true;if(active)status('Search canceled.')}
- function close(){cancel();dialog.close()}
- $('#discoverOpen').onclick=()=>{dialog.showModal();$('#discoverInput').focus();render()};$('#discoverClose').onclick=close;dialog.addEventListener('cancel',cancel);dialog.addEventListener('pointerdown',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){e.preventDefault();close()}});$('#discoverCancel').onclick=cancel;
- $('#modeArea').onclick=()=>setMode('area');$('#modeExperiment').onclick=()=>setMode('experiment');$('#discoverInput').oninput=proposal;$('#discoverBreadth').onchange=proposal;$('#discoverInputLanguage').onchange=proposal;$('#discoverQuery').oninput=()=>{queryEdited=true};
- $('#discoverLearning').onclick=()=>{learning=!learning;$('#discoverLearning').setAttribute('aria-pressed',String(learning));$('#discoverLearning').textContent=learning?'Learn from scratch ✓':'Learn from scratch ○';render()};
- function existing(p){return getPapers().find(known=>samePaper(known,p))}
- function rankedResults(){return results.map((p,index)=>({p,index,matches:matchConcepts(p,activeConcepts)})).sort((a,b)=>b.matches.length-a.matches.length||a.index-b.index)}
- function render(){const list=$('#discoverResults');list.replaceChildren();const ranked=rankedResults();$('#discoverGraphTools').hidden=!results.length;$('#discoverCreateGraph').disabled=!!controller||building;$('#discoverLearning').disabled=!!controller||building;
- for(const {p,matches}of ranked){const article=el('article',{class:'discovery-result'});if(learning)article.append(el('span',{class:'learning-label'},learningLevel(p).label));article.append(el('h3',{},p.title));const meta=el('div',{class:'result-meta'});if(p.preprint)meta.append(el('span',{class:'preprint'},'PREPRINT'));const authors=p.authors.split(' and ');meta.append(el('span',{},[authors.slice(0,3).join('; ')+(authors.length>3?' et al.':''),p.journal,p.year].filter(Boolean).join(' · ')));article.append(meta);article.append(el('p',{class:'result-relevance'},matches.length?'Matches in title or abstract: '+matches.map(c=>c.label).join(' · '):'Retrieved from OpenAlex. Read the abstract to assess its relevance.'));
- if(p.abstract){const details=el('details');details.append(el('summary',{},'View abstract'),el('p',{},p.abstract));article.append(details)}else article.append(el('p',{class:'result-meta'},'No abstract available.'));
- const actions=el('div',{class:'result-actions'}),known=existing(p),add=el('button',{},known?'Already in your library ✓':'Add to graph ＋');add.disabled=!!known;add.onclick=()=>{addPaper(p);render()};actions.append(add);if(known){const view=el('button',{},'View in graph');view.onclick=()=>{close();pickPaper(known.id)};actions.append(view)}actions.append(el('a',{href:p.url,target:'_blank',rel:'noopener noreferrer'},'OpenAlex ↗'));article.append(actions);list.append(article)}
- $('#discoverMore').hidden=!nextCursor||results.length>=total;$('#discoverMore').disabled=!!controller||building;
+ const strip=s=>new DOMParser().parseFromString(String(s||''),'text/html').body.textContent||'';
+ const status=text=>{$('#discoverStatus').textContent=text};
+ const inputControls=['#discoverInput','#discoverQuery','#discoverBreadth','#discoverInputLanguage','#modeArea','#modeExperiment','#discoverLearning','#discoverGraphCount','#discoverCandidateCount','#discoverFoundation'];
+ function lock(on){
+  for(const selector of inputControls)$(selector).disabled=on;
+  $('#discoverSearch').disabled=on;
+  $('#discoverMore').disabled=on;
+  $('#discoverCreateGraph').disabled=on||!activePlan;
+  $('#discoverCancel').hidden=!on;
  }
- async function search(more=false){if(controller||(!more&&building))return false;if(!more){activeQuery=$('#discoverQuery').value.trim()||proposal().query;if(!activeQuery){status('Enter a subject or describe your project.');$('#discoverInput').focus();return}activeConcepts=planSearch($('#discoverInput').value,mode,$('#discoverBreadth').value==='strict').concepts;results=[];nextCursor=null;total=0;render()}
- const requestedCursor=more?nextCursor:'*';if(!requestedCursor)return;const id=++requestId,abort=new AbortController();controller=abort;$('#discoverSearch').disabled=true;$('#discoverCancel').hidden=false;$('#discoverMore').disabled=true;status(more?'Searching for more results…':'Searching OpenAlex…');const timer=setTimeout(()=>abort.abort(),60000);
- try{if(!more&&!preparedEnglish){status('Preparing the English query…');const translated=await translateQuery(queryEdited?activeQuery:$('#discoverInput').value,{signal:abort.signal,area:mode==='area'});if(id!==requestId)return false;activeQuery=planSearch(strip(translated),mode,$('#discoverBreadth').value==='strict').query;preparedEnglish=true;$('#discoverQuery').value=activeQuery}activeConcepts=planSearch(activeQuery,mode,$('#discoverBreadth').value==='strict').concepts;$('#discoverConcepts').replaceChildren(...activeConcepts.map(c=>el('span',{},c.label)));status(more?'Searching for more results…':'Searching OpenAlex…');const response=await fetch(searchUrl(activeQuery,requestedCursor),{signal:abort.signal,credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error(response.status===429?'The service is busy. Wait a few seconds and try again.':'OpenAlex is currently unavailable. Please try again.');const data=await response.json();if(id!==requestId)return;const records=data.results||[],batch=records.filter(isEnglishRecord).map(r=>fromOpenAlex(r,strip)).filter(Boolean);for(const paper of batch)if(!results.some(p=>samePaper(p,paper)))results.push(paper);total=Number(data.meta?.count)||0;const page=Number(data.meta?.page||(requestedCursor==='*'?1:requestedCursor));nextCursor=records.length&&page*20<total?String(page+1):null;
- status(results.length?`${results.length} of ${total.toLocaleString('en-US')} results loaded. English only. Matches in titles and abstracts.`:'No results. Try broader terms or switch to “Match any concept”.');return true;
- }catch(error){if(id===requestId)status(error.name==='AbortError'?'The query timed out. Please try again.':error.message||'Could not connect to OpenAlex.');return false}finally{clearTimeout(timer);if(id===requestId){controller=null;$('#discoverSearch').disabled=building;$('#discoverCancel').hidden=!building;render()}}}
- async function learningCandidates(count){const id=++requestId,abort=new AbortController();controller=abort;const timer=setTimeout(()=>abort.abort(),60000);try{for(const [index,base]of learningSearchUrls(activeQuery).entries()){if(index===1&&count===1)break;const desired=index===0?Math.ceil(count*.4):Math.max(1,Math.floor(count*.25));for(let page=1;page<=Math.min(4,Math.max(2,Math.ceil(count/20)));page++){const u=new URL(base);u.searchParams.set('page',String(page));status(index===0?'Searching for fundamentals and introductions…':'Searching for applications and advanced topics…');const response=await fetch(u.href,{signal:abort.signal,credentials:'omit',referrerPolicy:'no-referrer'});if(!response.ok)throw Error('Could not complete the learning search. Please try again.');const data=await response.json();if(id!==requestId)return false;const records=data.results||[];for(const p of records.filter(isEnglishRecord).map(r=>fromOpenAlex(r,strip)).filter(Boolean))if(!results.some(x=>samePaper(x,p)))results.push(p);const level=index===0?0:3;if(results.filter(p=>learningLevel(p).level===level).length>=desired||!records.length||page*20>=Number(data.meta?.count||0))break}}return true}catch(error){if(id===requestId)status(error.name==='AbortError'?'The learning search timed out. Please try again.':error.message);return false}finally{clearTimeout(timer);if(id===requestId)controller=null}}
- $('#discoverCreateGraph').onclick=async()=>{if(controller||building)return;const count=Number($('#discoverGraphCount').value);if(!Number.isInteger(count)||count<1||count>200){status('Choose a whole number of papers between 1 and 200.');$('#discoverGraphCount').focus();return}if(!results.length){status('Search for papers before creating a graph.');return}const current=++buildId;building=true;$('#discoverGraphCount').disabled=true;$('#discoverSearch').disabled=true;$('#discoverCancel').hidden=false;render();
- try{if(learning){const ok=await learningCandidates(count);if(current!==buildId||!ok)return}while(results.length<count&&nextCursor){const ok=await search(true);if(current!==buildId||!ok)return}if(current!==buildId)return;if(results.length<count){status(`Only ${results.length} unique English papers are available for this query. Choose fewer papers or broaden your search.`);return}const choice=learning?selectLearningPapers(rankedResults().map(item=>item.p),count):{papers:rankedResults().slice(0,count).map(item=>item.p)};if(choice.missingBasics){status('No clearly introductory materials were found. Try a broader query or turn off “Learn from scratch”.');return}createGraph(choice.papers,{learning});building=false;close()}finally{if(current===buildId){building=false;$('#discoverGraphCount').disabled=false;$('#discoverSearch').disabled=false;$('#discoverCancel').hidden=true;render()}}};
+ function invalidate(){
+  results=[];activePlan=null;nextPage=null;loadedQuery='';learningReport=null;render();
+ }
+ function proposal(){
+  if($('#discoverFoundation').value===foundationAuto)$('#discoverFoundation').value='';
+  queryEdited=false;queryEnglish=$('#discoverInputLanguage').value==='en';invalidate();
+  try{
+   const plan=planSearch($('#discoverInput').value,mode,scope());
+   $('#discoverQuery').value=$('#discoverInputLanguage').value==='en'?plan.query:$('#discoverInput').value.trim();
+   $('#discoverConcepts').replaceChildren(...plan.concepts.map(c=>el('span',{},c.label)));status('');
+  }catch(error){$('#discoverConcepts').replaceChildren();$('#discoverQuery').value='';status(error.message)}
+ }
+ function setMode(value){
+  mode=value;$('#modeArea').setAttribute('aria-pressed',String(mode==='area'));$('#modeExperiment').setAttribute('aria-pressed',String(mode==='experiment'));
+  $('#discoverPrompt').textContent=mode==='area'?'What would you like to explore?':'Describe your project or research';
+  $('#discoverInput').placeholder=mode==='area'?'For example: "social memory" hippocampus sleep':'For example: compare "teaching methods" and "programming education"';
+  proposal();
+ }
+ function cancel(notify=true){
+  const active=!!controller;operation++;controller?.abort();controller=null;building=false;lock(false);
+  // A canceled first request has no usable query; a canceled expansion keeps loaded results.
+  render();if(active&&notify)status('Search canceled.');
+ }
+ function close(){cancel(false);dialog.close()}
+ $('#discoverOpen').onclick=()=>{dialog.showModal();$('#discoverInput').focus();render()};$('#discoverClose').onclick=close;
+ dialog.addEventListener('cancel',cancel);
+ dialog.addEventListener('pointerdown',e=>{if(e.target!==dialog)return;const r=dialog.getBoundingClientRect();if(e.clientX<r.left||e.clientX>r.right||e.clientY<r.top||e.clientY>r.bottom){e.preventDefault();close()}});
+ $('#discoverCancel').onclick=cancel;
+ $('#modeArea').onclick=()=>setMode('area');$('#modeExperiment').onclick=()=>setMode('experiment');
+ $('#discoverInput').oninput=proposal;$('#discoverBreadth').onchange=proposal;$('#discoverInputLanguage').onchange=proposal;
+ $('#discoverQuery').oninput=()=>{queryEdited=true;invalidate();status('Run the updated query to refresh results.')};
+ $('#discoverLearning').onclick=()=>{learning=!learning;$('#discoverLearning').setAttribute('aria-pressed',String(learning));$('#discoverLearning').textContent=learning?'Learn from scratch ✓':'Learn from scratch ○';render()};
+ $('#discoverGraphCount').onchange=()=>{learningReport=null;renderLearning()};
+ $('#discoverFoundation').oninput=()=>{learningReport=null;render()};
+ function existing(p){return getPapers().find(known=>samePaper(known,p))}
+ function rankedResults(){return activePlan?rankResults(results,activePlan):[]}
+ function learningContext(){
+  const subject=$('#discoverFoundation').value.trim()||activePlan?.concepts[0]?.label||'';
+  return {subject,target:activePlan?.query||'',targetPaperIds:rankedResults().filter(item=>item.eligible).map(item=>item.p.id)};
+ }
+ function currentLearningPath(count=Number($('#discoverGraphCount').value)||200){
+  const context=learningContext();
+  if(!activePlan||!context.subject)return buildLearningPath([],{...context,count});
+  const broad=compileQuery(learningSearchJobs(activePlan,context.subject,0).query);
+  const allowed=new Set([...rankResults(results,broad),...rankedResults()].filter(item=>item.eligible).map(item=>item.p.id));
+  return buildLearningPath(results.filter(p=>allowed.has(p.id)),{...context,count});
+ }
+ function renderLearning(){
+  $('#discoverLearningPlan').hidden=!learning;
+  if(!learning)return;
+  const context=learningContext(),report=learningReport||currentLearningPath();
+  const list=$('#discoverLearningStages');list.replaceChildren();
+  for(const goal of learningGoals(context)){
+   const step=report.steps.find(item=>item.goalId===goal.id),gap=report.gaps.find(item=>item.stage===goal.stage);
+   list.append(el('li',{},`${goal.label}: ${goal.objective} ${step?'Reading found.':gap?.reason||'Search pending.'}`));
+  }
+  $('#discoverLearningStatus').textContent=report.complete?'All five stages have candidate readings. Teaching roles are estimated from abstracts.':report.steps.length?`Partial path: ${report.steps.length} reading(s). The next missing stage is ${report.gaps[0]?.label}.`:'The search will start with introductory material and stop if a prerequisite stage is missing.';
+ }
+ function render(){
+  renderLearning();
+  $('#discoverCountLabel').textContent=learning?'Maximum readings':'Papers in the graph';
+  $('#discoverCreateGraph').textContent=learning?'Create learning path ↗':'Create graph ↗';
+  const list=$('#discoverResults');list.replaceChildren();const ranked=rankedResults();
+  $('#discoverGraphTools').hidden=!results.length;$('#discoverCreateGraph').disabled=!!controller||building||!activePlan;
+  for(const {p,matches,eligible}of ranked){
+   const article=el('article',{class:'discovery-result'});
+   if(learning)article.append(el('span',{class:'learning-label'},learningLevel(p).label));
+   article.append(el('h3',{},p.title));const meta=el('div',{class:'result-meta'});
+   if(p.preprint)meta.append(el('span',{class:'preprint'},'PREPRINT'));
+   const authors=p.authors.split(' and ');meta.append(el('span',{},[authors.slice(0,3).join('; ')+(authors.length>3?' et al.':''),p.journal,p.year].filter(Boolean).join(' · ')));article.append(meta);
+   article.append(el('p',{class:'result-relevance'},eligible?'Matches in title, abstract or keywords: '+matches.map(c=>c.label).join(' · '):'The available metadata does not confirm this query. Excluded from automatic graph selection.'));
+   if(p.abstract){const details=el('details');details.append(el('summary',{},'View abstract'),el('p',{},p.abstract));article.append(details)}else article.append(el('p',{class:'result-meta'},'No abstract available.'));
+   const actions=el('div',{class:'result-actions'}),known=existing(p),add=el('button',{},known?'Already in your library ✓':'Add to library ＋');
+   add.disabled=!!known;add.onclick=()=>{addPaper(p);render()};actions.append(add);
+   if(known){const view=el('button',{},'View in graph');view.onclick=()=>{close();pickPaper(known.id)};actions.append(view)}
+   actions.append(el('a',{href:p.url,target:'_blank',rel:'noopener noreferrer'},'OpenAlex ↗'));article.append(actions);list.append(article);
+  }
+  $('#discoverMore').hidden=!nextPage;$('#discoverMore').disabled=!!controller||building;
+ }
+ function merge(records){
+  for(const record of records){
+   if(!isEnglishRecord(record))continue;
+   const paper=fromOpenAlex(record,strip);if(!paper)continue;
+   if(!results.some(p=>samePaper(p,paper)))results.push(paper);
+  }
+ }
+ async function request(url,signal){
+  const response=await fetch(url,{signal,credentials:'omit',referrerPolicy:'no-referrer'});
+  if(!response.ok)throw Error(response.status===429?'The service is busy. Wait a few seconds and try again.':'OpenAlex is currently unavailable. Please try again.');
+  return response.json();
+ }
+ async function page(number,signal,id){
+  const data=await request(searchUrl(activePlan.query,number),signal);
+  if(id!==operation)return false;
+  const records=data.results||[];merge(records);total=Number(data.meta?.count)||0;
+  nextPage=records.length&&number*20<total?number+1:null;
+  render();return true;
+ }
+ function summary(){
+  const eligible=rankedResults().filter(item=>item.eligible).length;
+  status(results.length?`${results.length} candidates loaded of ${total.toLocaleString('en-US')}. ${eligible} match the query in available metadata. English only.`:'No results. Try Exploratory mode, fewer required concepts or different phrases.');
+ }
+ async function search(more=false){
+  if(controller)return;
+  const id=++operation,abort=new AbortController();controller=abort;lock(true);const timer=setTimeout(()=>abort.abort(),60000);
+  try{
+   if(!more){
+    const input=$('#discoverInput').value,query=$('#discoverQuery').value.trim();
+    const edited=queryEdited;invalidate();
+    let plan;
+    if($('#discoverInputLanguage').value==='es'&&!(edited&&queryEnglish)){
+     status('Preparing the English query…');
+     const translated=await translateQuery(edited?query:input,{signal:abort.signal,area:!edited&&mode==='area'});
+     if(id!==operation)return;
+     // A hand-edited Boolean query is compiled directly after translation.
+     plan=edited?compileQuery(strip(translated)):planSearch(strip(translated),mode,scope());
+    }else plan=edited?compileQuery(query):planSearch(input,mode,scope());
+    if(!plan.query)throw Error('Enter a subject or describe your project.');
+    activePlan=plan;$('#discoverQuery').value=plan.query;
+    if(!$('#discoverFoundation').value.trim()){foundationAuto=results[0]?.topic?.foundation||plan.concepts[0]?.label||'';$('#discoverFoundation').value=foundationAuto}
+    loadedQuery=plan.query;loadedScope=scope();loadedLanguage=$('#discoverInputLanguage').value;
+    // The query box now contains English, even if the original input was Spanish.
+    queryEdited=true;queryEnglish=true;
+    $('#discoverConcepts').replaceChildren(...plan.concepts.map(c=>el('span',{},c.label)));
+   }else if(!activePlan||!nextPage)return;
+   status(more?'Searching for more results…':'Searching OpenAlex…');
+   if(await page(more?nextPage:1,abort.signal,id)){
+    if(!more&&$('#discoverFoundation').value===foundationAuto){foundationAuto=results[0]?.topic?.foundation||activePlan.concepts[0]?.label||'';$('#discoverFoundation').value=foundationAuto}
+    summary();renderLearning();
+   }
+  }catch(error){if(id===operation)status(error.name==='AbortError'?'The query timed out. Please try again.':error.message)}
+  finally{clearTimeout(timer);if(id===operation){controller=null;lock(false);render()}}
+ }
+ async function learningCandidates(count,signal,id){
+  const target=candidateTarget(count,$('#discoverCandidateCount').value),maxRequests=Math.ceil(target/20),attempts=new Map();
+  learningReport=currentLearningPath(count);renderLearning();
+  for(let fetched=0;fetched<maxRequests;fetched++){
+   // Missing objectives drive the next request. Never jump over a missing bridge.
+   const gap=learningReport.gaps[0];
+   if(!gap||learningReport.steps.length>=count)break;
+   const stage=gap.stage,number=(attempts.get(stage)||0)+1;
+   if(number>2)break;
+   attempts.set(stage,number);
+   const job=learningSearchJobs(activePlan,learningContext().subject,stage),url=new URL(job.url);url.searchParams.set('page',String(number));
+   status(`Building the learning path: searching ${job.label.toLowerCase()}…`);
+   const data=await request(url.href,signal);if(id!==operation)return false;
+   const candidates=(data.results||[]).map(record=>fromOpenAlex(record,strip)).filter(Boolean);
+   const allowed=new Set(rankResults(candidates,compileQuery(job.query)).filter(item=>item.eligible).map(item=>item.p.id));
+   merge((data.results||[]).filter(record=>allowed.has('openalex-'+record.id?.split('/').pop())));
+   learningReport=currentLearningPath(count);render();
+   if(learningReport.gaps[0]?.stage===stage&&number*20>=Number(data.meta?.count||0))break;
+  }
+  return true;
+ }
+ $('#discoverCreateGraph').onclick=async()=>{
+  if(controller)return;
+  const count=Number($('#discoverGraphCount').value);
+  if(!Number.isInteger(count)||count<1||count>200){status('Choose a whole number of papers between 1 and 200.');$('#discoverGraphCount').focus();return}
+  if(!activePlan||!results.length){status('Search for papers before creating a graph.');return}
+  if($('#discoverQuery').value.trim()!==loadedQuery||scope()!==loadedScope||$('#discoverInputLanguage').value!==loadedLanguage){status('Run the updated query to refresh results.');return}
+  const id=++operation,abort=new AbortController();controller=abort;building=true;lock(true);const timer=setTimeout(()=>abort.abort(),60000);
+  try{
+   const target=candidateTarget(count,$('#discoverCandidateCount').value);
+   // Limit expansion by provider pages as well as unique records, including duplicate-heavy responses.
+   while(!learning&&nextPage&&nextPage<=Math.ceil(target/20)&&results.length<target){
+    status(`Comparing more candidates (${results.length} loaded, up to ${target})…`);
+    if(!await page(nextPage,abort.signal,id))return;
+   }
+   if(learning&&!await learningCandidates(count,abort.signal,id))return;
+   if(id!==operation)return;
+   const eligible=rankedResults().filter(item=>item.eligible).map(item=>item.p);
+   if(!learning&&!eligible.length){status('No candidates match the query in available metadata. Review the query or try Exploratory mode.');return}
+   const choice=learning?{...learningReport,missingBasics:!learningReport?.steps.length}:{papers:eligible.slice(0,count)};
+   if(choice.missingBasics){status('No supported beginner entry was found. Review the foundation area or the reading abstracts; no advanced-only path was created.');return}
+   createGraph(choice.papers,{learning,learningPath:learning?choice:null});close();
+  }catch(error){if(id===operation)status(error.name==='AbortError'?'The comparison timed out. Loaded results are kept; try again or compare fewer candidates.':error.message)}
+  finally{clearTimeout(timer);if(id===operation){controller=null;building=false;lock(false);render()}}
+ };
  $('#discoverSearch').onclick=()=>search(false);$('#discoverMore').onclick=()=>search(true);
  return {cancel};
 }
