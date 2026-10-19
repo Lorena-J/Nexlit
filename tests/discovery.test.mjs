@@ -1,5 +1,7 @@
+import {createOpenAlexClient as realOpenAlexClient} from '../dist/openalex-client.js';
+const createOpenAlexClient=options=>realOpenAlexClient({...options,cacheTTL:0,minInterval:0});
 import * as learningCore from '../dist/learning-core.js';
-import {lessonPapers,asOpenAlex} from './fixtures/learning.mjs';
+import {lessonPapers,asOpenAlex,expandedLessonPapers} from './fixtures/learning.mjs';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import vm from 'node:vm';
@@ -16,9 +18,15 @@ const url=new URL(core.searchUrl('programming fundamentals','2'));assert.equal(u
 assert(core.translationChunks('á '.repeat(1000)).every(s=>new TextEncoder().encode(s).length<=440));
 class Element{constructor(){this.children=[];this.attrs={};this.hidden=true;this.value='';this.handlers={};this.disabled=false;this.textContent=''}setAttribute(k,v){this.attrs[k]=String(v)}append(...items){this.children.push(...items)}replaceChildren(...items){this.children=items}addEventListener(k,v){this.handlers[k]=v}getBoundingClientRect(){return {left:100,top:100,right:900,bottom:700}}focus(){}showModal(){this.hidden=false}close(){this.hidden=true}}
 const page=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8'),els=new Map();for(const m of page.matchAll(/id="([^"]+)"/g))els.set('#'+m[1],new Element());els.get('#discoverInputLanguage').value='en';
-let library=[],requests=[],fetchMode='success',picked=null,graph=[],graphOptions=null;
-const mockFetch=async(url,options)=>{requests.push(url);if(String(url).includes('mymemory'))return {ok:true,json:async()=>({responseStatus:200,responseData:{translatedText:'I am looking for academic publications on programming fundamentals.'}})};
+let lastOptions,library=[],requests=[],fetchMode='success',picked=null,graph=[],graphOptions=null;
+const mockFetch=async(url,options)=>{requests.push(url);lastOptions=options;if(String(url).includes('mymemory'))return {ok:true,json:async()=>({responseStatus:200,responseData:{translatedText:'I am looking for academic publications on programming fundamentals.'}})};
+ if(fetchMode==='daily')return {ok:false,status:429,json:async()=>({message:'Insufficient budget',dailyRemainingUsd:0,retryAfter:3600})};
  if(fetchMode==='failure')return {ok:false,status:503};if(fetchMode==='cancel')return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));
+ if(fetchMode==='learning-many'){
+  const page=Number(new URL(url).searchParams.get('page'));
+  const records=page===1?[...expandedLessonPapers.slice(0,5),...Array.from({length:15},(_,i)=>({...expandedLessonPapers[0],id:'unclassified-'+i,doi:'10.0000/unknown-'+i,title:'Social recognition observation '+i,abstract:'An empirical observation without enough metadata to establish a teaching role.'}))]:expandedLessonPapers.slice(5);
+  return {ok:true,json:async()=>({meta:{count:40,page},results:records.map(asOpenAlex)})};
+ }
  if(['learning','learning-empty','learning-cancel'].includes(fetchMode)){
   const titleQuery=new URL(url).searchParams.get('search.title')||'';
   if(titleQuery&&fetchMode==='learning-cancel')return await new Promise((_,reject)=>options.signal.addEventListener('abort',()=>reject(Object.assign(Error(),{name:'AbortError'}))));
@@ -33,7 +41,8 @@ const mockFetch=async(url,options)=>{requests.push(url);if(String(url).includes(
  }
  return {ok:true,json:async()=>({meta:{count:25,page:number},results:fetchMode==='pages'&&number===2?[...fixture.results,...[4,5].map(i=>({...fixture.results[0],id:'https://openalex.org/W'+i,doi:'10.0000/extra-'+i,title:'Programming Fundamentals applications '+i})),{...fixture.results[0],id:'https://openalex.org/Wfr',language:'fr'}]:fixture.results})};
 };
-const context=vm.createContext({learningCore,learningLevel,core:{...core,translateQuery:(text,options)=>core.translateQuery(text,{...options,fetcher:mockFetch})},document:{querySelector:s=>els.get(s),createElement:()=>new Element()},DOMParser:class{parseFromString(s){return {body:{textContent:s.replace(/<[^>]+>/g,'')}}}},AbortController,URL,setTimeout,clearTimeout,fetch:mockFetch,getPapers:()=>library,addPaper:p=>library.push(p),pickPaper:id=>picked=id,createGraph:(papers,options)=>{graph=papers;graphOptions=options}});
+const session=new Map();
+const context=vm.createContext({sessionStorage:{getItem:key=>session.get(key),setItem:(key,value)=>session.set(key,value),removeItem:key=>session.delete(key)},createOpenAlexClient,learningCore,learningLevel,core:{...core,translateQuery:(text,options)=>core.translateQuery(text,{...options,fetcher:mockFetch})},document:{querySelector:s=>els.get(s),createElement:()=>new Element()},DOMParser:class{parseFromString(s){return {body:{textContent:s.replace(/<[^>]+>/g,'')}}}},AbortController,URL,setTimeout,clearTimeout,fetch:mockFetch,getPapers:()=>library,addPaper:p=>library.push(p),pickPaper:id=>picked=id,createGraph:(papers,options)=>{graph=papers;graphOptions=options}});
 const source="const {planSearch,compileQuery,rankResults,candidateTarget,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchJobs}=core;const {buildLearningPath,learningGoals}=learningCore;\n"+readFileSync(new URL('../dist/discovery-ui.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace('export function setupDiscovery','function setupDiscovery');vm.runInContext(source+'\nsetupDiscovery({getPapers,addPaper,pickPaper,createGraph});',context);
 els.get('#discoverOpen').onclick();els.get('#discoverInput').value='programming fundamentals';els.get('#discoverInput').oninput();await els.get('#discoverSearch').onclick();assert.equal(els.get('#discoverResults').children.length,3);
 let actions=els.get('#discoverResults').children[0].children.at(-1);actions.children[0].onclick();assert.equal(library.length,1);actions=els.get('#discoverResults').children[0].children.at(-1);assert(actions.children[0].disabled);actions.children[1].onclick();assert(picked);
@@ -100,3 +109,27 @@ await els.get('#discoverSearch').onclick();const translations=requests.filter(ur
 await els.get('#discoverSearch').onclick();assert.equal(requests.filter(url=>url.includes('mymemory')).length,translations);
 assert.equal(new URL(requests.at(-1)).searchParams.get('search.title_abstract_keywords'),'programming AND fundamentals');
 console.log('Candidate expansion, late relevance, cancellation, query invalidation and repeated translated queries pass.');
+
+// Covering the five stages on page one must not stop expansion at five papers.
+fetchMode='learning-many';els.get('#discoverInputLanguage').value='en';els.get('#discoverBreadth').value='precise';els.get('#discoverInput').value='"social recognition"';els.get('#discoverInput').oninput();
+await els.get('#discoverSearch').onclick();els.get('#discoverFoundation').value='social recognition';
+els.get('#discoverLearning').onclick();els.get('#discoverGraphCount').value='20';els.get('#discoverCandidateCount').value='100';
+const expansionStart=requests.length;await els.get('#discoverCreateGraph').onclick();
+assert.equal(graph.length,20);assert.equal(graphOptions.learningPath.requestedCount,20);
+assert(requests.slice(expansionStart).some(url=>new URL(url).searchParams.get('page')==='2'),'Continue fetching after five stages are covered');
+assert.equal(new Set(graphOptions.learningPath.steps.map(step=>step.stage)).size,5);
+console.log('Learning discovery continues beyond its five-stage outline to reach a 20-reading target.');
+
+// An exhausted shared budget opens the access controls and does not keep calling the service.
+fetchMode='daily';await els.get('#discoverSearch').onclick();
+assert.equal(els.get('#openalexAccess').open,true);
+assert(els.get('#discoverStatus').textContent.includes('daily budget is exhausted'));
+assert(!els.get('#openalexUseKey').disabled);
+const blockedCalls=requests.length;await els.get('#discoverSearch').onclick();assert.equal(requests.length,blockedCalls);
+els.get('#openalexKey').value='test-personal-key';els.get('#openalexUseKey').onclick();
+assert.equal(session.get('nexlit-openalex-key'),'test-personal-key');assert.equal(els.get('#openalexKey').value,'');
+fetchMode='success';await els.get('#discoverSearch').onclick();
+assert.equal(lastOptions.headers.Authorization,'Bearer test-personal-key');assert(!requests.at(-1).includes('test-personal-key'));
+assert.equal(els.get('#discoverResults').children.length,3);
+els.get('#openalexRemoveKey').onclick();assert.equal(session.size,0);assert(els.get('#openalexRemoveKey').disabled);
+console.log('Daily budget errors open access controls; personal keys restore requests and can be removed.');

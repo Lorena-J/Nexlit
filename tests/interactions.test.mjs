@@ -1,4 +1,9 @@
-import {lessonPapers} from './fixtures/learning.mjs';
+import {separateNodes,visibleLabels} from '../dist/graph-layout.js';
+import {createOpenAlexClient as realOpenAlexClient} from '../dist/openalex-client.js';
+const createOpenAlexClient=options=>realOpenAlexClient({...options,cacheTTL:0,minInterval:0});
+import * as discoveryCore from '../dist/discovery-core.js';
+import * as learningCore from '../dist/learning-core.js';
+import {lessonPapers,asOpenAlex} from './fixtures/learning.mjs';
 import {mergeDiscoveryBatch} from '../dist/discovery-core.js';
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
@@ -16,21 +21,29 @@ class Element {
   querySelectorAll(s){return this.children.filter(c=>(c.attrs.class||'').split(' ').includes(s.slice(1)))}
   remove(){if(this.parent)this.parent.children=this.parent.children.filter(c=>c!==this)}
   addEventListener(type,fn){this.handlers[type]=fn}
-  getAnimations(){return []} animate(){} focus(){this.onfocus?.()}
+  getAnimations(){return []} animate(){} focus(){this.onfocus?.()} showModal(){this.open=true} close(){this.open=false}
   getBoundingClientRect(){return {width:1200,height:720,left:0,top:0}}
   createSVGPoint(){return {x:0,y:0,matrixTransform(){return {x:this.x,y:this.y}}}}
   getScreenCTM(){return {}} setPointerCapture(){}
 }
 const page=readFileSync(new URL('../dist/index.html',import.meta.url),'utf8'),elements=new Map();
 for(const match of page.matchAll(/id="([^"]+)"/g))elements.set('#'+match[1],new Element());
+// SVG hidden is not an HTMLElement property: assigning .hidden does not reflect the attribute.
+elements.get('#graph').setAttribute('hidden','');
 elements.get('#topicsPanel').hidden=true;elements.get('#readingPanel').hidden=true;
 elements.set('.universe',new Element());elements.get('#graph').append(new Element('defs'));
 const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.meta.url),'utf8'));
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
 let animation,savedState;const docHandlers=new Map();
-const context=vm.createContext({core,console,discoveryConfig:null,discoveryMerge:mergeDiscoveryBatch,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(type,fn){if(!docHandlers.has(type))docHandlers.set(type,[]);docHandlers.get(type).push(fn)}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
+const context=vm.createContext({separateNodes,visibleLabels,core,console,discoveryConfig:null,discoveryMerge:mergeDiscoveryBatch,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(type,fn){if(!docHandlers.has(type))docHandlers.set(type,[]);docHandlers.get(type).push(fn)}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
 const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan,buildLearningPath,learningOrderIssues}=core;const mergeDiscoveryBatch=discoveryMerge;const setupDiscovery=config=>{discoveryConfig=config};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
 await vm.runInContext('(async()=>{'+source+'})()',context);
+assert.equal(elements.get('#empty').hidden,false);
+assert(Object.hasOwn(elements.get('#graph').attrs,'hidden'));
+assert.equal(elements.get('#nodeLayer').children.length,0,'Opening the app must not render a saved graph automatically');
+assert.equal(elements.get('#resumeLibrary').hidden,false);
+elements.get('#resumeLibrary').onclick();
+assert(!Object.hasOwn(elements.get('#graph').attrs,'hidden'),'Resuming must remove the SVG hidden attribute, not just assign an unrelated property');
 const nodes=elements.get('#nodeLayer').children;
 assert.equal(nodes.length,11);
 const event={stopPropagation(){},preventDefault(){}};
@@ -53,6 +66,22 @@ assert(css.includes('.node .halo{pointer-events:none;'));
 assert(css.includes('fill:#d8e6f0;opacity:1;'));
 assert(css.includes('.node .hit-target{pointer-events:all}'));
 console.log('11 nodes: clicks, cards, keyboard access and summaries pass. Animation is stable over 100 frames.');
+// Zoom separates centres without making their click targets swallow their neighbours.
+elements.get('#closeCard').onclick();
+elements.get('#graph').handlers.pointerenter();animation(1900);
+const before=nodes.map(node=>node.attrs.transform);
+animation(1916);assert.deepEqual(nodes.map(node=>node.attrs.transform),before,'Rotation must stop while the pointer is in the graph');
+const beforeRadius=Number(nodes[0].querySelector('.hit-target').attrs.r);
+for(let i=0;i<8;i++)elements.get('#zoomIn').onclick();
+assert.notDeepEqual(nodes.map(node=>node.attrs.transform),before);
+assert.equal(Number(nodes[0].querySelector('.hit-target').attrs.r),beforeRadius,'Zoom must not enlarge the hit targets');
+for(let i=0;i<8;i++)elements.get('#zoomOut').onclick();
+elements.get('#fit').onclick();
+nodes[0].onpointerenter();animation(1932);
+assert.equal(nodes[0].querySelector('.node-label').style.opacity,'1','The hovered label must remain readable');
+nodes[0].onpointerleave();elements.get('#graph').handlers.pointerleave();
+console.log('Dense graph controls: stationary hover, constant-size zoom targets and hovered labels pass.');
+
 
 const topicList=elements.get('#topicsList');
 const expectedGroups=core.groupByContent(papers).groups;assert.equal(topicList.children.length,expectedGroups.length);
@@ -127,10 +156,28 @@ elements.get('#allLibrary').onclick();assert.equal(elements.get('#nodeLayer').ch
 console.log('Graph size, library preservation, reading path preservation and full-library reset pass.');
 
 context.discoveryConfig.createGraph(lessonPapers,{learning:true,learningPath:core.buildLearningPath(lessonPapers,{subject:'graph theory'})});assert(savedState.learningMode);assert(savedState.readingEnabled);assert.equal(savedState.readingPlan.length,5);
-elements.get('#readingList').children[0].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);assert(elements.get('#edgeLayer').children.every(e=>e.attrs['stroke-opacity']==='0'));assert(elements.get('#edgeLayer').children.every(e=>e.style.pointerEvents==='none'));
-elements.get('#readingList').children[1].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);
-elements.get('#readingList').children.at(-1).children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,0);
-elements.get('#readingSwitch').checked=false;elements.get('#readingSwitch').onchange();assert.equal(elements.get('#routeLayer').children.length,0);assert(elements.get('#edgeLayer').children.some(e=>e.attrs['stroke-opacity']!=='0'));
+const relationshipCount=elements.get('#edgeLayer').children.length;
+assert(relationshipCount>0,'Learning graphs must retain their topic/citation connections');
+const assertRelationshipsVisible=()=>{
+ assert.equal(elements.get('#edgeLayer').children.length,relationshipCount);
+ assert(elements.get('#edgeLayer').children.every(edge=>Number(edge.attrs['stroke-opacity'])>=.65),'All relationship lines must remain clearly visible, including edges outside the selection');
+ assert(elements.get('#edgeLayer').children.every(edge=>edge.style.pointerEvents!=='none'),'Relationship lines must stay interactive');
+};
+assert.equal(elements.get('#routeLayer').children.length,0,'No reading-order arrows before selecting a step');
+assertRelationshipsVisible();
+for(let frame=0;frame<30;frame++){animation(4000+frame*16);assertRelationshipsVisible()}
+elements.get('#readingSwitch').checked=false;elements.get('#readingSwitch').onchange();assert.equal(elements.get('#routeLayer').children.length,0);assertRelationshipsVisible();
+elements.get('#readingSwitch').checked=true;elements.get('#readingSwitch').onchange();assert.equal(elements.get('#routeLayer').children.length,0);assertRelationshipsVisible();
+elements.get('#readingList').children[0].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);assertRelationshipsVisible();
+assert.equal(elements.get('#routeLayer').children[0].attrs['aria-label'],'Reading step 1 to 2');
+assert(elements.get('#edgeLayer').children.some(edge=>edge.dataset.active==='0'),'Fixture must include edges unrelated to the selected reading');
+for(let frame=0;frame<30;frame++){animation(5000+frame*16);assertRelationshipsVisible()}
+for(const coordinate of ['x1','y1','x2','y2'])assert(Number.isFinite(Number(elements.get('#routeLayer').children[0].attrs[coordinate])));
+elements.get('#readingList').children[1].children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,1);assertRelationshipsVisible();
+assert.equal(elements.get('#routeLayer').children[0].attrs['aria-label'],'Reading step 2 to 3');
+elements.get('#readingList').children.at(-1).children[0].onclick();assert.equal(elements.get('#routeLayer').children.length,0);assertRelationshipsVisible();
+elements.get('#closeCard').onclick();assert.equal(elements.get('#routeLayer').children.length,0);assertRelationshipsVisible();
+elements.get('#readingSwitch').checked=false;elements.get('#readingSwitch').onchange();assert.equal(elements.get('#routeLayer').children.length,0);assertRelationshipsVisible();
 console.log('Step-by-step reading links and return to the relationship graph pass.');
 
 const movable=elements.get('#card');elements.get('#nodeLayer').children[0].onclick(event);
@@ -168,3 +215,63 @@ assert.deepEqual(savedState.readingPlan.map(step=>step.id),lessonPapers.map(p=>p
 assert.equal(savedState.readingPlan[2].requires[0],'foundations');
 assert.equal(savedState.readingPlan[2].bridges[0].from,'foundations');
 assert.doesNotThrow(()=>core.validateWorkspace(JSON.parse(JSON.stringify(savedState))));
+
+// First visits start at the welcome screen without fetching or saving a demo library.
+let startupFetches=0,startupSaves=0,welcomeSearches=0;
+const freshContext=vm.createContext({...context,localStorage:{getItem:()=>null,setItem(){startupSaves++}},fetch(){startupFetches++;throw Error('Unexpected startup request')}});
+await vm.runInContext('(async()=>{'+source+'})()',freshContext);
+assert.equal(elements.get('#empty').hidden,false);
+assert(Object.hasOwn(elements.get('#graph').attrs,'hidden'));
+assert.equal(elements.get('#resumeLibrary').hidden,true);
+assert.equal(elements.get('#nodeLayer').children.length,0);
+assert.equal(startupFetches,0);assert.equal(startupSaves,0);
+elements.get('#discoverOpen').onclick=()=>{welcomeSearches++};
+elements.get('#welcomeSearch').onclick();assert.equal(welcomeSearches,1);
+console.log('Welcome: saved libraries resume explicitly, first visits make no demo requests, and the main action opens search.');
+
+// Exercise the real app and discovery controller together, without mocking createGraph.
+for(const id of ['#discoverInput','#discoverQuery','#discoverFoundation'])elements.get(id).value='';
+elements.get('#discoverInputLanguage').value='en';elements.get('#discoverBreadth').value='precise';
+elements.get('#discoverGraphCount').value='2';elements.get('#discoverCandidateCount').value='100';
+elements.get('#graph').setAttribute('hidden','');
+let createdLibrary=null,searchRequests=0;
+const integrationContext=vm.createContext({...context,createOpenAlexClient,discoveryCore,learningCore,AbortController,
+ localStorage:{getItem:()=>null,setItem(key,value){createdLibrary=JSON.parse(value)}},
+ DOMParser:class{parseFromString(text){return {body:{textContent:text.replace(/<[^>]+>/g,'')}}}},
+ fetch:async()=>{searchRequests++;return {ok:true,json:async()=>({meta:{count:2,page:1},results:lessonPapers.slice(0,2).map(asOpenAlex)})}}
+});
+const bindings='const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan,buildLearningPath,learningOrderIssues,learningLevel}=core;const {mergeDiscoveryBatch,planSearch,compileQuery,rankResults,candidateTarget,fromOpenAlex,samePaper,searchUrl,isEnglishRecord,translateQuery,learningSearchJobs}=discoveryCore;const {learningGoals}=learningCore;';
+const discoverySource=readFileSync(new URL('../dist/discovery-ui.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'').replace('export function setupDiscovery','function setupDiscovery');
+const appSource=readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
+await vm.runInContext('(async()=>{'+bindings+discoverySource+appSource+'})()',integrationContext);
+assert(Object.hasOwn(elements.get('#graph').attrs,'hidden'));
+elements.get('#welcomeSearch').onclick();assert.equal(elements.get('#discoverDialog').open,true);
+elements.get('#discoverInput').value='"graph theory"';elements.get('#discoverInput').oninput();
+await elements.get('#discoverSearch').onclick();
+assert.equal(elements.get('#discoverResults').children.length,2);
+await elements.get('#discoverCreateGraph').onclick();
+assert.equal(searchRequests,1);
+assert.equal(createdLibrary.graphPaperIds.length,2);
+assert.equal(elements.get('#nodeLayer').children.length,2);
+assert(!Object.hasOwn(elements.get('#graph').attrs,'hidden'),'Created SVG graph must actually be visible');
+assert.equal(elements.get('#empty').hidden,true);
+assert.equal(elements.get('#discoverDialog').open,false);
+console.log('Welcome → search → create graph: real controllers produce visible nodes and close the search dialog.');
+
+// A learning search uses the same relationship graph as imported bibliography; reading order is an overlay.
+elements.get('#discoverOpen').onclick();
+elements.get('#discoverLearning').onclick();
+elements.get('#discoverFoundation').value='graph theory';
+await elements.get('#discoverCreateGraph').onclick();
+assert.equal(createdLibrary.readingPlan.length,2);
+assert.equal(elements.get('#routeLayer').children.length,0,'Do not replace topic lines with a full reading-order path');
+assert(elements.get('#edgeLayer').children.length>0);
+assert(elements.get('#edgeLayer').children.every(edge=>Number(edge.attrs['stroke-opacity'])>0));
+const firstStepId=createdLibrary.readingPlan[0].id,secondStepId=createdLibrary.readingPlan[1].id;
+elements.get('#nodeLayer').children.find(node=>node.attrs['data-id']===firstStepId).onclick(event);
+assert.equal(elements.get('#routeLayer').children.length,1);
+assert.equal(elements.get('#routeLayer').children[0].attrs['aria-label'],'Reading step 1 to 2');
+assert(elements.get('#edgeLayer').children.every(edge=>Number(edge.attrs['stroke-opacity'])>0));
+assert(elements.get('#nodeLayer').children.some(node=>node.attrs['data-id']===firstStepId));
+assert(elements.get('#nodeLayer').children.some(node=>node.attrs['data-id']===secondStepId));
+console.log('Learning search → graph: relationships stay visible; only the selected reading links to the next step.');
