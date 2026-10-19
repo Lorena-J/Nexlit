@@ -27,6 +27,14 @@ An explicit query such as `("social memory" OR "social recognition") AND hippoca
 
 Each search or graph comparison has a 60-second timeout and can be canceled. Changing the query, mode or input language invalidates old candidates. A failed expansion keeps previously loaded results for retry.
 
+## OpenAlex access and quotas
+
+Open **OpenAlex access** in the search dialog to add your personal key from [OpenAlex settings](https://openalex.org/settings/api). Verify your OpenAlex email before using the key. It is kept in this tab's session storage and sent only to the OpenAlex API in an authorization header; it is excluded from library JSON and exports. Use **Remove key** to return to anonymous access.
+
+Anonymous requests share a daily network budget. A daily-budget error shows the reset time in UTC and opens the access controls; repeating a request cannot restore that budget. Temporary frequency limits receive at most two retries with short backoff. Requests are paced, and successful responses are cached in memory for 15 minutes, with a maximum of 50 entries. Changing the key clears that cache and the locally remembered quota block. Reloading the page clears the response cache.
+
+The personal key uses your own OpenAlex allowance, which can also be exhausted. Nexlit does not include a shared application key or require a backend. See [OpenAlex authentication](https://help.openalex.org/api/authentication/).
+
 ## Current limits
 
 Local matching is deliberately simpler than OpenAlex's stemming and keyword expansion. Missing abstracts, synonyms and word variants can cause a relevant provider result to fail local confirmation. Review these results manually; the graph's confirmed count is not a measure of scientific relevance or quality. Multiple alternatives in an OR group still count as separate concepts in the ranking coverage component.
