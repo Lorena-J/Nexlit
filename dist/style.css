@@ -67,3 +67,7 @@ button{position:relative}
 @media(forced-colors:active) and (hover:hover){
   :is(button,.upload):hover:not(:disabled):not(:has(input:disabled)){outline:2px solid Highlight;outline-offset:2px}
 }
+
+.discover-query-help{font-size:11px;line-height:1.7;color:var(--muted);margin:8px 0 12px}.discover-graph-tools select{font:12px var(--font);padding:9px;background:#0a1422;color:var(--ink);border:1px solid var(--line);border-radius:5px}
+
+.learning-plan-preview{padding:16px;margin:12px 0;border:1px solid #00d4bd44;border-radius:9px;background:#00d4bd06}.learning-plan-preview input{width:100%;font:12px var(--font);padding:10px;color:var(--ink);background:#0a1422;border:1px solid var(--line);border-radius:6px}.learning-plan-preview ol{padding-left:20px;font-size:11px;line-height:1.8;color:#b9ccd9}.learning-plan-preview p,.learning-path-status{font-size:11px;line-height:1.7;color:#dfc997}.learning-plan-preview small{font-size:10px;line-height:1.6;color:var(--muted)}.reading-evidence{font-size:10px;line-height:1.7;color:var(--muted);margin-top:8px}.reading-evidence summary{cursor:pointer;color:#9edce5}
