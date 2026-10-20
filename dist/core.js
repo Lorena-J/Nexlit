@@ -1,3 +1,5 @@
+import {assessLearning,buildLearningPath} from './learning-core.js?v=29';
+export {buildLearningPath,learningOrderIssues} from './learning-core.js?v=29';
 export function clean(s=''){return String(s).replace(/\\(?:textit|textbf|emph|mathrm)\s*/g,'').replace(/[{}]/g,'').replace(/\\&/g,'&').replace(/\s+/g,' ').trim()}
 export function parseBib(src){
  const papers=[],macros={};let i=0;
@@ -36,7 +38,22 @@ function migrateReadingReason(reason){
  if(match)return 'Topic continuity: '+(match[1]==='tema general'?'general topic':match[1]==='Otros temas'?'Other topics':match[1])+'. Chronological order within the group.';
  return reason;
 }
-export function validateWorkspace(data){if(data?.version!==1||!Array.isArray(data.papers)||!Array.isArray(data.manual))throw Error('This JSON file is not a Nexlit library.');if(!data.papers.length)throw Error('The library is empty.');const ids=new Set();for(const p of data.papers){if(typeof p.id!=='string'||typeof p.title!=='string'||ids.has(p.id))throw Error('Invalid or duplicate reference.');ids.add(p.id);for(const k of ['authors','year','journal','doi','url','abstract','keywords','notes'])if(p[k]!==undefined&&typeof p[k]!=='string')throw Error('Invalid field: '+k);p.status=({Pendiente:'Unread',Leyendo:'Reading','Leído':'Read'})[p.status]??p.status;if(!['Unread','Reading','Read'].includes(p.status))p.status='Unread';if(!Array.isArray(p.references)||p.references.some(x=>typeof x!=='string'))throw Error('Invalid reference list.')}if(data.graphPaperIds!==undefined&&data.graphPaperIds!==null&&(!Array.isArray(data.graphPaperIds)||!data.graphPaperIds.length||new Set(data.graphPaperIds).size!==data.graphPaperIds.length||data.graphPaperIds.some(id=>!ids.has(id))))throw Error('Invalid graph selection.');if(data.learningMode!==undefined&&typeof data.learningMode!=='boolean')throw Error('Invalid learning mode.');if(data.readingEnabled!==undefined&&typeof data.readingEnabled!=='boolean')throw Error('Invalid reading path state.');if(data.readingPlan===undefined)data.readingPlan=[];if(!Array.isArray(data.readingPlan))throw Error('Invalid reading path.');const planned=new Set();for(const item of data.readingPlan){if(!item||!ids.has(item.id)||planned.has(item.id)||typeof item.reason!=='string')throw Error('Invalid or duplicate reading path.');item.reason=migrateReadingReason(item.reason);planned.add(item.id)}for(const e of data.manual)if(e.type!=='manual'||typeof e.reason!=='string'||!ids.has(e.source)||!ids.has(e.target))throw Error('Invalid manual connection.');return data}
+function validateLearningData(data,ids){
+ for(const step of data.readingPlan){
+  if(step.stage!==undefined&&(!Number.isInteger(step.stage)||step.stage<0||step.stage>4))throw Error('Invalid learning stage.');
+  for(const key of ['goalId','stageLabel','objective','evidence','confidence'])if(step[key]!==undefined&&typeof step[key]!=='string')throw Error('Invalid learning step.');
+  if(step.bridges!==undefined&&(!Array.isArray(step.bridges)||step.bridges.some(bridge=>!bridge||typeof bridge.from!=='string'||!ids.has(bridge.from)||!Array.isArray(bridge.concepts)||bridge.concepts.some(term=>typeof term!=='string'))))throw Error('Invalid learning content bridge.');
+  if(step.requires!==undefined&&(!Array.isArray(step.requires)||step.requires.some(id=>typeof id!=='string'||!ids.has(id)||id===step.id)))throw Error('Invalid learning prerequisite.');
+ }
+ const report=data.learningReport;
+ if(report!==undefined&&report!==null){
+  if(report.version!==1||typeof report.subject!=='string'||typeof report.target!=='string'||typeof report.complete!=='boolean'||!Array.isArray(report.gaps))throw Error('Invalid learning report.');
+  for(const key of ['requestedCount','candidateCount','eligibleCount','selectedCount'])if(report[key]!==undefined&&(!Number.isInteger(report[key])||report[key]<0))throw Error('Invalid learning counts.');
+  if(report.shortfall!==undefined&&typeof report.shortfall!=='string')throw Error('Invalid learning shortfall.');
+  for(const gap of report.gaps)if(!gap||!Number.isInteger(gap.stage)||gap.stage<0||gap.stage>4||typeof gap.label!=='string'||typeof gap.reason!=='string')throw Error('Invalid learning gap.');
+ }
+}
+export function validateWorkspace(data){if(data?.version!==1||!Array.isArray(data.papers)||!Array.isArray(data.manual))throw Error('This JSON file is not a Nexlit library.');if(!data.papers.length)throw Error('The library is empty.');const ids=new Set();for(const p of data.papers){if(typeof p.id!=='string'||typeof p.title!=='string'||ids.has(p.id))throw Error('Invalid or duplicate reference.');ids.add(p.id);for(const k of ['authors','year','journal','doi','url','abstract','keywords','notes'])if(p[k]!==undefined&&typeof p[k]!=='string')throw Error('Invalid field: '+k);p.status=({Pendiente:'Unread',Leyendo:'Reading','Leído':'Read'})[p.status]??p.status;if(!['Unread','Reading','Read'].includes(p.status))p.status='Unread';if(!Array.isArray(p.references)||p.references.some(x=>typeof x!=='string'))throw Error('Invalid reference list.')}if(data.graphPaperIds!==undefined&&data.graphPaperIds!==null&&(!Array.isArray(data.graphPaperIds)||!data.graphPaperIds.length||new Set(data.graphPaperIds).size!==data.graphPaperIds.length||data.graphPaperIds.some(id=>!ids.has(id))))throw Error('Invalid graph selection.');if(data.learningMode!==undefined&&typeof data.learningMode!=='boolean')throw Error('Invalid learning mode.');if(data.readingEnabled!==undefined&&typeof data.readingEnabled!=='boolean')throw Error('Invalid reading path state.');if(data.readingPlan===undefined)data.readingPlan=[];if(!Array.isArray(data.readingPlan))throw Error('Invalid reading path.');const planned=new Set();for(const item of data.readingPlan){if(!item||!ids.has(item.id)||planned.has(item.id)||typeof item.reason!=='string')throw Error('Invalid or duplicate reading path.');item.reason=migrateReadingReason(item.reason);planned.add(item.id)}validateLearningData(data,ids);for(const e of data.manual)if(e.type!=='manual'||typeof e.reason!=='string'||!ids.has(e.source)||!ids.has(e.target))throw Error('Invalid manual connection.');return data}
 
 // Prefer provider-assigned topics; otherwise form groups from distinctive shared terms.
 export function groupByContent(papers){
@@ -48,16 +65,10 @@ export function groupByContent(papers){
  const rest=pending.filter(p=>!assigned.has(p.id));if(rest.length){groups.set('other',{id:'other',label:'Other topics',paperIds:rest.map(p=>p.id)});rest.forEach(p=>assignment.set(p.id,'other'))}
  return {groups:[...groups.values()],assignment};
 }
-export function suggestReadingPlan(papers,{fromScratch=false}={}){
- if(fromScratch)return papers.map((p,i)=>({id:p.id,reason:learningLevel(p).reason,level:learningLevel(p).level,i})).sort((a,b)=>a.level-b.level||a.i-b.i).map(({id,reason})=>({id,reason}));
+export function suggestReadingPlan(papers,{fromScratch=false,subject='',target=''}={}){
+ if(fromScratch)return buildLearningPath(papers,{subject:subject||papers[0]?.topic?.label||'',target}).steps;
  const {assignment,groups}=groupByContent(papers),labels=new Map(groups.map(g=>[g.id,g.label]));
  return papers.map(p=>{const review=/review|revisi[oó]n|survey|state of the art|annual review|current opinion/i.test([p.type,p.title,p.journal].join(' ')),intro=/introduction|fundamentals?|basics?|tutorial|primer|introduccion|fundamentos|conceptos basicos/i.test(p.title),methods=/methodolog|protocol|implementation|metodolog/i.test(p.title),group=assignment.get(p.id);return {id:p.id,stage:review?0:intro?1:methods?3:2,group,year:Number(p.year)||9999,reason:review?'Overview: a review or synthesis of the field.':intro?'Concepts and fundamentals before more specific papers.':methods?'Methods and practical applications.':'Topic continuity: '+(labels.get(group)||'general topic')+'. Chronological order within the group.'}}).sort((a,b)=>a.stage-b.stage||(a.group||'').localeCompare(b.group||'')||a.year-b.year||a.id.localeCompare(b.id)).map(({id,reason})=>({id,reason}));
 }
 
-export function learningLevel(p){
- const title=(p.title||'').toLowerCase();
- if(/\badvanced\b|frontiers|state.of.the.art|recent advances|cutting.edge/.test(title))return {level:3,label:'Advanced',reason:'In depth: the title suggests advanced or frontier research.'};
- if(/introduc|fundamental|\bbasic|elementary|tutorial|\bprimer\b|beginner|first course|starting|foundations of/.test(title))return {level:0,label:'Fundamentals',reason:'First step: the title presents fundamentals or an introduction to the topic.'};
- if(/review|survey|overview|handbook/.test(title+' '+(p.type||'')))return {level:1,label:'Overview',reason:'Build context with a review or overview of the field.'};
- return {level:2,label:'Development and applications',reason:'Continue with specific papers or applications; check their prerequisites.'};
-}
+export function learningLevel(p){return assessLearning(p)}
