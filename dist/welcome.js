@@ -1,4 +1,4 @@
-// Reveal the central actions only after the logo and heading have reached the top.
+// Reveal the central actions only after the logo and heading have settled above them.
 (() => {
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const root = document.documentElement;
@@ -22,15 +22,19 @@
   document.addEventListener('animationcancel', onAnimationEnd);
   document.addEventListener('DOMContentLoaded', () => {
     const identity = document.querySelector('.welcome-identity');
+    const actions = document.querySelector('.welcome-actions');
     const measure = () => {
       if (!identity.offsetParent) return;
       const top = identity.offsetParent.getBoundingClientRect().top + identity.offsetTop;
-      root.style.setProperty('--welcome-rise', `${8 - top}px`);
+      const scale = parseFloat(getComputedStyle(identity).getPropertyValue('--welcome-final-scale'));
+      const destination = Math.max(8, actions.getBoundingClientRect().top - identity.offsetHeight * scale - 16);
+      root.style.setProperty('--welcome-rise', `${destination - top}px`);
     };
     measure();
     if (motion.matches) finish();
     root.classList.add('welcome-ready');
-    new ResizeObserver(measure).observe(document.querySelector('#empty'));
+    const observer = new ResizeObserver(measure);
+    for (const element of [document.querySelector('#empty'), identity, actions]) observer.observe(element);
     try { sessionStorage.setItem(key, '1'); } catch { /* The current page still plays only once. */ }
   }, {once: true});
 })();
