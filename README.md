@@ -13,7 +13,7 @@ python3 -m http.server 8000 --directory dist
 
 Open [localhost:8000](http://localhost:8000). The welcome screen opens without a graph. Search for papers, import a bibliography, or choose **Continue exploring your library** to return to saved work. A sample BibTeX file is available at `dist/example.bib`.
 
-On the first visit in each browser tab, the logo and “Follow your curiosity.” appear together at their original size in the center, stay there for 1 second, then move to the top and shrink as one group over a smooth 1.5-second transition. The buttons retain their original layout and behavior. The introduction does not replay when returning home in that tab. With reduced motion enabled, the smaller group appears at the top immediately.
+On the first visit in each browser tab, the logo and “Follow your curiosity.” appear together at their original size in the center, stay there for 0.6 seconds, then move to the top and shrink as one group over a smooth 1.5-second transition. The buttons retain their original layout and behavior. The introduction does not replay when returning home in that tab. With reduced motion enabled, the smaller group appears at the top immediately.
 
 ## What you can do
 
