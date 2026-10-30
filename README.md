@@ -24,6 +24,8 @@ On the first visit in each browser tab, only the original Nexlit logo and “Fol
 - Fetch abstracts and citation metadata from Crossref, and generate short extractive abstract summaries.
 - Export your library, including reading progress, as JSON.
 
+The welcome screen uses a charcoal background with soft sage and lavender accents. The original Nexlit logo keeps its shape and uses the same pastel palette.
+
 The interface and default search language are English. Spanish queries can optionally be translated through MyMemory. Graph creation compares a larger candidate pool and can return fewer nodes when too few matches are confirmed. See [how search works](docs/search.md) and the [evaluation checklist](docs/search-evaluation.md).
 
 ## Data and current limits

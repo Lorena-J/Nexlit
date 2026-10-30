@@ -73,19 +73,25 @@ button{position:relative}
 .learning-plan-preview{padding:16px;margin:12px 0;border:1px solid #00d4bd44;border-radius:9px;background:#00d4bd06}.learning-plan-preview input{width:100%;font:12px var(--font);padding:10px;color:var(--ink);background:#0a1422;border:1px solid var(--line);border-radius:6px}.learning-plan-preview ol{padding-left:20px;font-size:11px;line-height:1.8;color:#b9ccd9}.learning-plan-preview p,.learning-path-status{font-size:11px;line-height:1.7;color:#dfc997}.learning-plan-preview small{font-size:10px;line-height:1.6;color:var(--muted)}.reading-evidence{font-size:10px;line-height:1.7;color:var(--muted);margin-top:8px}.reading-evidence summary{cursor:pointer;color:#9edce5}
 
 /* The welcome view is also the initial HTML state: only the identity appears first. */
+/* Soft sage and lavender accents on a charcoal welcome screen. */
+body:has(.is-welcome){--welcome-accent:#b7d2bd;--welcome-secondary:#c8bce5;background:#12181a;color:#e8e8e0}
+.welcome-palette-filter{position:absolute;width:0;height:0;overflow:hidden;pointer-events:none}
 body:has(.is-welcome) header{display:none}
 body:has(.is-welcome) main{padding:0}
-.universe.is-welcome{height:auto;min-height:100svh;display:grid;place-items:center;background:radial-gradient(ellipse at 50% 35%,#10274044,transparent 64%)}
+.universe.is-welcome{height:auto;min-height:100svh;display:grid;place-items:center;background:radial-gradient(ellipse at 38% 30%,#b7d2bd08,transparent 52%),radial-gradient(ellipse at 68% 58%,#c8bce508,transparent 54%)}
 .is-welcome .reading-toggle,.is-welcome .reading-panel,.is-welcome .topic-filter,.is-welcome .universe-controls,.is-welcome .all-library{display:none}
 #empty.welcome{position:relative;inset:auto;flex-direction:column;width:100%;max-width:740px;min-height:100svh;margin:auto;padding:16px 18px;text-align:center}
-.welcome-mark{display:block;width:clamp(230px,30vw,360px);height:auto;overflow:visible;margin:-12px 0 -8px;flex-shrink:0}
+.welcome-mark{display:block;width:clamp(230px,30vw,360px);height:auto;overflow:visible;margin:-12px 0 -8px;flex-shrink:0;filter:url(#welcomePalette)}
 h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacing:-2.2px;margin:18px 0 28px;transform:none;font-stretch:normal}
 .welcome-identity{display:flex;flex-direction:column;align-items:center;width:100%;transform-origin:top center;--welcome-final-scale:.6}
 .welcome-ready .welcome-identity{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}
 .welcome-intro.welcome-ready .welcome-identity{animation:welcome-rise 1s cubic-bezier(.45,0,.25,1) .6s both}
 .welcome-actions{position:absolute;top:50%;left:50%;translate:-50% -50%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:min(620px,calc(100vw - 36px))}
-#empty .welcome-primary,#empty .welcome-resume{margin:0;padding:16px 18px;min-height:64px;border-radius:8px;font-size:12px;font-weight:600;line-height:1.5;color:#e6fff9;border-color:#0787ff70;background:linear-gradient(120deg,#00d4bd13,#0787ff18,#8338ff15)}
-#empty .welcome-resume{background:#ffffff04;border-color:#ffffff35;color:#c0d0de}
+#empty .welcome-primary,#empty .welcome-resume{margin:0;padding:16px 18px;min-height:64px;border-radius:8px;font-size:12px;font-weight:600;line-height:1.5;color:#1d2923;border-color:var(--welcome-accent);background:var(--welcome-accent);box-shadow:0 0 24px #b7d2bd08}
+#empty .welcome-resume{background:#c8bce508;border-color:#c8bce554;color:#ddd5ec;box-shadow:none}
+#empty .welcome-primary:hover{background:#c8dfcd;box-shadow:0 0 20px #b7d2bd12}
+#empty .welcome-resume:not(:disabled):hover{background:#c8bce512;border-color:var(--welcome-secondary);box-shadow:0 0 22px #c8bce512}
+#empty .welcome-actions button:focus-visible{outline-color:var(--welcome-secondary)}
 #empty .welcome-resume:disabled{opacity:.45;cursor:not-allowed}
 .welcome-intro .welcome-actions{visibility:hidden;opacity:0}
 .welcome-ready:not(.welcome-intro) .welcome-actions{animation:welcome-actions-in .3s ease-out both}
