@@ -1,31 +1,36 @@
-// Set the initial state before the welcome markup paints. Without JS, show the final view.
+// Only the logo and heading move; their original layout space remains reserved.
 (() => {
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const root = document.documentElement;
   const key = 'nexlit-welcome-seen';
-  if (motion.matches) return;
-  try { if (sessionStorage.getItem(key)) return; } catch { /* Storage may be disabled. */ }
+  let seen = false;
+  try { seen = !!sessionStorage.getItem(key); } catch { /* Storage may be disabled. */ }
+  if (!motion.matches && !seen) root.classList.add('welcome-intro');
 
-  root.classList.add('welcome-intro');
   const finish = () => {
-    root.classList.remove('welcome-intro', 'welcome-intro-ready');
+    root.classList.remove('welcome-intro');
     motion.removeEventListener('change', onMotionChange);
     document.removeEventListener('animationend', onAnimationEnd);
     document.removeEventListener('animationcancel', onAnimationEnd);
   };
   const onMotionChange = () => { if (motion.matches) finish(); };
   const onAnimationEnd = event => {
-    if (event.animationName === 'welcome-reveal') finish();
+    if (event.animationName === 'welcome-rise') finish();
   };
   motion.addEventListener('change', onMotionChange);
   document.addEventListener('animationend', onAnimationEnd);
   document.addEventListener('animationcancel', onAnimationEnd);
   document.addEventListener('DOMContentLoaded', () => {
-    if (motion.matches) return finish();
-    const mark = document.querySelector('.welcome-mark').getBoundingClientRect();
-    root.style.setProperty('--welcome-offset', `${innerHeight / 2 - mark.top - mark.height / 2}px`);
-    root.classList.add('welcome-intro-ready');
-    // Keep navigation home and reloads in this tab from replaying the introduction.
+    const identity = document.querySelector('.welcome-identity');
+    const measure = () => {
+      if (!identity.offsetParent) return;
+      const top = identity.offsetParent.getBoundingClientRect().top + identity.offsetTop;
+      root.style.setProperty('--welcome-rise', `${8 - top}px`);
+    };
+    measure();
+    if (motion.matches) finish();
+    root.classList.add('welcome-ready');
+    new ResizeObserver(measure).observe(document.querySelector('#empty'));
     try { sessionStorage.setItem(key, '1'); } catch { /* The current page still plays only once. */ }
   }, {once: true});
 })();

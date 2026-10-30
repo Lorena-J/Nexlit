@@ -73,30 +73,24 @@ button{position:relative}
 .learning-plan-preview{padding:16px;margin:12px 0;border:1px solid #00d4bd44;border-radius:9px;background:#00d4bd06}.learning-plan-preview input{width:100%;font:12px var(--font);padding:10px;color:var(--ink);background:#0a1422;border:1px solid var(--line);border-radius:6px}.learning-plan-preview ol{padding-left:20px;font-size:11px;line-height:1.8;color:#b9ccd9}.learning-plan-preview p,.learning-path-status{font-size:11px;line-height:1.7;color:#dfc997}.learning-plan-preview small{font-size:10px;line-height:1.6;color:var(--muted)}.reading-evidence{font-size:10px;line-height:1.7;color:var(--muted);margin-top:8px}.reading-evidence summary{cursor:pointer;color:#9edce5}
 
 /* The welcome view is also the initial HTML state: no graph flashes before startup. */
-body:has(.is-welcome){--welcome-header-height:216px;--welcome-mark-width:180px;--welcome-start-scale:2}
-body:has(.is-welcome) header{height:var(--welcome-header-height);align-items:flex-end;justify-content:center;padding:0 3% 18px}
-body:has(.is-welcome) .brand{display:none}
-body:has(.is-welcome) .header-actions{max-width:none;flex-wrap:nowrap;justify-content:center}
-.universe.is-welcome{height:auto;min-height:calc(100svh - var(--welcome-header-height) - 24px);display:grid;place-items:center;background:radial-gradient(ellipse at 50% 35%,#10274044,transparent 64%)}
+.universe.is-welcome{height:auto;min-height:calc(100svh - 132px);display:grid;place-items:center;background:radial-gradient(ellipse at 50% 35%,#10274044,transparent 64%)}
 .is-welcome .reading-toggle,.is-welcome .reading-panel,.is-welcome .topic-filter,.is-welcome .universe-controls,.is-welcome .all-library{display:none}
-#empty.welcome{position:static;inset:auto;flex-direction:column;width:100%;max-width:740px;margin:auto;padding:16px 18px 48px;text-align:center}
-.welcome-mark{position:absolute;top:calc(8px - var(--welcome-header-height));left:50%;translate:-50% 0;display:block;width:var(--welcome-mark-width);height:auto;overflow:visible;margin:0;transform-origin:center}
+#empty.welcome{position:relative;inset:auto;flex-direction:column;width:100%;max-width:740px;margin:auto;padding:16px 18px 48px;text-align:center}
+.welcome-mark{display:block;width:clamp(230px,30vw,360px);height:auto;overflow:visible;margin:-12px 0 -8px;flex-shrink:0}
 h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacing:-2.2px;margin:18px 0 28px;transform:none;font-stretch:normal}
 #empty .welcome-primary{font-size:12px;font-weight:600;color:#e6fff9;background:linear-gradient(120deg,#00d4bd13,#0787ff18,#8338ff15);border-color:#0787ff70;padding:14px 23px;border-radius:8px}
 .welcome-primary span{margin-left:20px;color:#5de8d1}
 #empty .welcome-resume{margin-top:17px;font-size:11px;color:#91a8bc;border-color:transparent;background:transparent;padding:9px 13px}
 .welcome-resume span{margin-left:9px}
-.welcome-content{display:flex;flex-direction:column;align-items:center;width:100%}
-/* Reserve the final layout; transforms and opacity never move the buttons or page. */
-.welcome-intro .welcome-content{visibility:hidden;opacity:0}
-.welcome-intro-ready .welcome-mark{animation:welcome-rise .5s cubic-bezier(.22,.61,.36,1) .3s both}
-.welcome-intro-ready .welcome-content{animation:welcome-reveal .25s ease-out .65s both}
-@keyframes welcome-rise{from{transform:translateY(var(--welcome-offset,80px)) scale(var(--welcome-start-scale))}to{transform:translateY(0) scale(1)}}
-@keyframes welcome-reveal{from{visibility:hidden;opacity:0}to{visibility:visible;opacity:1}}
-@media(max-width:650px){body:has(.is-welcome){--welcome-header-height:196px;--welcome-mark-width:160px;--welcome-start-scale:1.5625}.universe.is-welcome{min-height:calc(100svh - var(--welcome-header-height) - 16px)}#empty.welcome{padding:8px 12px 36px}h1.welcome-title{letter-spacing:-1.3px}}
-@media(max-height:650px){body:has(.is-welcome){--welcome-header-height:180px;--welcome-mark-width:140px;--welcome-start-scale:1.5}h1.welcome-title{font-size:clamp(26px,6svh,40px);margin:10px 0 20px}#empty.welcome{padding-top:8px;padding-bottom:20px}}
-@media(max-height:450px){body:has(.is-welcome){--welcome-header-height:152px;--welcome-mark-width:118px;--welcome-start-scale:1.3}body:has(.is-welcome) header{padding-bottom:8px}h1.welcome-title{margin:4px 0 12px}#empty.welcome{padding-top:4px;padding-bottom:8px}#empty .welcome-resume{margin-top:8px;padding-top:6px;padding-bottom:6px}}
-@media(prefers-reduced-motion:reduce){.welcome-intro .welcome-content{visibility:visible;opacity:1}.welcome-intro-ready .welcome-mark{transform:none}}
+.welcome-identity{display:flex;flex-direction:column;align-items:center;width:100%;transform-origin:top center;--welcome-final-scale:.4}
+/* The identity keeps its original space so every button stays in place. */
+.welcome-ready .welcome-identity{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}
+.welcome-intro.welcome-ready .welcome-identity{animation:welcome-rise .65s cubic-bezier(.22,.61,.36,1) .5s both}
+@keyframes welcome-rise{from{transform:translateY(0) scale(1)}to{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}}
+.welcome-node-glow{animation:welcome-breathe 6s ease-in-out infinite}
+@keyframes welcome-breathe{0%,100%{opacity:.45}50%{opacity:.8}}
+@media(max-width:650px){.universe.is-welcome{min-height:calc(100svh - 106px)}#empty.welcome{padding:8px 12px 36px}.welcome-mark{width:250px;max-width:85vw;margin-top:0}h1.welcome-title{letter-spacing:-1.3px}}
+@media(prefers-reduced-motion:reduce){.welcome-node-glow{animation:none}}
 
 .openalex-access{margin:15px 0;padding:12px 14px;border:1px solid #0787ff44;border-radius:8px;font-size:11px;line-height:1.7}.openalex-access summary{cursor:pointer;color:#bad9ed}.openalex-access p{color:var(--muted)}.openalex-access a{color:#71d9e4}.openalex-access input{width:100%;padding:10px;background:#0a1422;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:12px var(--font)}.openalex-key-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.openalex-key-actions button{font-size:11px;padding:8px 12px}.openalex-access small{color:var(--muted);font-size:10px}
 
