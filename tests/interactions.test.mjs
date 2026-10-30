@@ -222,7 +222,8 @@ const freshContext=vm.createContext({...context,localStorage:{getItem:()=>null,s
 await vm.runInContext('(async()=>{'+source+'})()',freshContext);
 assert.equal(elements.get('#empty').hidden,false);
 assert(Object.hasOwn(elements.get('#graph').attrs,'hidden'));
-assert.equal(elements.get('#resumeLibrary').hidden,true);
+assert.equal(elements.get('#resumeLibrary').hidden,false);
+assert.equal(elements.get('#resumeLibrary').disabled,true);
 assert.equal(elements.get('#nodeLayer').children.length,0);
 assert.equal(startupFetches,0);assert.equal(startupSaves,0);
 elements.get('#discoverOpen').onclick=()=>{welcomeSearches++};

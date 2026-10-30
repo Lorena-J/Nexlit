@@ -1,4 +1,4 @@
-// Only the logo and heading move; their original layout space remains reserved.
+// Reveal the central actions only after the logo and heading have reached the top.
 (() => {
   const motion = matchMedia('(prefers-reduced-motion: reduce)');
   const root = document.documentElement;

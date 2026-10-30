@@ -103,7 +103,7 @@ function rebuild(resetLayout=false){
  $('#empty').hidden=!home;$('#graphHeading').hidden=home;
  // SVGElement does not reflect HTMLElement.hidden; update the actual attribute.
  if(home)$('#graph').setAttribute('hidden','');else $('#graph').removeAttribute('hidden');
- $('#resumeLibrary').hidden=!state.papers.length;$('#export').disabled=!state.papers.length;
+ $('#resumeLibrary').disabled=!state.papers.length;$('#resumeLibrary').title=state.papers.length?'':'Your library is empty. Find your first connection to get started.';$('#export').disabled=!state.papers.length;
  if(home){
   positions.clear();projected.clear();nodeEls.clear();edgeEls=[];selected=null;routeLink=null;routeLinks=[];
   $('#nodeLayer').replaceChildren();$('#edgeLayer').replaceChildren();$('#routeLayer').replaceChildren();
