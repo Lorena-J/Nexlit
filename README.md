@@ -13,6 +13,8 @@ python3 -m http.server 8000 --directory dist
 
 Open [localhost:8000](http://localhost:8000). The welcome screen opens without a graph. Search for papers, import a bibliography, or choose **Continue exploring your library** to return to saved work. A sample BibTeX file is available at `dist/example.bib`.
 
+On the first visit in each browser tab, only the original Nexlit logo and “Follow your curiosity.” appear in the center. After 0.6 seconds, they move upward and shrink together over a smooth 1-second transition, settling just above the central actions. Once they arrive, “Find your first connection” and “Continue exploring your library” fade in side by side in the center of the screen. Continue is disabled until a library is available. The header is hidden on the welcome screen and returns in the graph view. The introduction does not replay when returning home in that tab; reduced motion shows the final layout immediately.
+
 ## What you can do
 
 - Search OpenAlex with Precise, Balanced or Exploratory mode; keep phrases in quotes and edit Boolean queries. You can also import BibTeX or Nexlit JSON libraries.
@@ -21,6 +23,8 @@ Open [localhost:8000](http://localhost:8000). The welcome screen opens without a
 - Use **Learn from scratch** to build a staged path from orientation to advanced readings, with multiple readings per stage, prerequisites and visible gaps. See [learning paths](docs/learning-paths.md).
 - Fetch abstracts and citation metadata from Crossref, and generate short extractive abstract summaries.
 - Export your library, including reading progress, as JSON.
+
+The welcome screen uses a charcoal background with soft sage and lavender accents. The original Nexlit logo keeps its shape and uses the same pastel palette.
 
 The interface and default search language are English. Spanish queries can optionally be translated through MyMemory. Graph creation compares a larger candidate pool and can return fewer nodes when too few matches are confirmed. See [how search works](docs/search.md) and the [evaluation checklist](docs/search-evaluation.md).
 
