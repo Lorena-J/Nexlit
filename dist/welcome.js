@@ -22,9 +22,8 @@
   document.addEventListener('animationcancel', onAnimationEnd);
   document.addEventListener('DOMContentLoaded', () => {
     if (motion.matches) return finish();
-    const area = document.querySelector('.universe').getBoundingClientRect();
     const mark = document.querySelector('.welcome-mark').getBoundingClientRect();
-    root.style.setProperty('--welcome-offset', `${area.top + area.height / 2 - mark.top - mark.height / 2}px`);
+    root.style.setProperty('--welcome-offset', `${innerHeight / 2 - mark.top - mark.height / 2}px`);
     root.classList.add('welcome-intro-ready');
     // Keep navigation home and reloads in this tab from replaying the introduction.
     try { sessionStorage.setItem(key, '1'); } catch { /* The current page still plays only once. */ }

@@ -13,7 +13,7 @@ python3 -m http.server 8000 --directory dist
 
 Open [localhost:8000](http://localhost:8000). The welcome screen opens without a graph. Search for papers, import a bibliography, or choose **Continue exploring your library** to return to saved work. A sample BibTeX file is available at `dist/example.bib`.
 
-On the first visit in each browser tab, the welcome logo pauses briefly in the center, then moves up as the actions appear. The introduction lasts less than a second and does not replay when returning home in that tab. With reduced motion enabled, the final layout appears immediately.
+On the first visit in each browser tab, the welcome logo pauses briefly in the center of the screen, then moves to the very top as the actions appear below. The introduction lasts less than a second and does not replay when returning home in that tab. With reduced motion enabled, the final layout appears immediately.
 
 ## What you can do
 
