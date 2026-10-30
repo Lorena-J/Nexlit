@@ -80,7 +80,7 @@ body:has(.is-welcome) main{padding:0}
 #empty.welcome{position:relative;inset:auto;flex-direction:column;width:100%;max-width:740px;min-height:100svh;margin:auto;padding:16px 18px;text-align:center}
 .welcome-mark{display:block;width:clamp(230px,30vw,360px);height:auto;overflow:visible;margin:-12px 0 -8px;flex-shrink:0}
 h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacing:-2.2px;margin:18px 0 28px;transform:none;font-stretch:normal}
-.welcome-identity{display:flex;flex-direction:column;align-items:center;width:100%;transform-origin:top center;--welcome-final-scale:.4}
+.welcome-identity{display:flex;flex-direction:column;align-items:center;width:100%;transform-origin:top center;--welcome-final-scale:.6}
 .welcome-ready .welcome-identity{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}
 .welcome-intro.welcome-ready .welcome-identity{animation:welcome-rise 1s cubic-bezier(.45,0,.25,1) .6s both}
 .welcome-actions{position:absolute;top:50%;left:50%;translate:-50% -50%;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px;width:min(620px,calc(100vw - 36px))}
