@@ -82,10 +82,17 @@ h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacin
 .welcome-primary span{margin-left:20px;color:#5de8d1}
 #empty .welcome-resume{margin-top:17px;font-size:11px;color:#91a8bc;border-color:transparent;background:transparent;padding:9px 13px}
 .welcome-resume span{margin-left:9px}
-.welcome-node-glow{animation:welcome-breathe 6s ease-in-out infinite}
-@keyframes welcome-breathe{0%,100%{opacity:.45}50%{opacity:.8}}
+.welcome-content{display:flex;flex-direction:column;align-items:center;width:100%}
+/* Reserve the final layout; transforms and opacity never move the buttons or page. */
+.welcome-intro .welcome-content{visibility:hidden;opacity:0}
+.welcome-intro-ready .welcome-mark{animation:welcome-rise .5s cubic-bezier(.22,.61,.36,1) .3s both}
+.welcome-intro-ready .welcome-content{animation:welcome-reveal .25s ease-out .65s both}
+@keyframes welcome-rise{from{transform:translateY(var(--welcome-offset,80px))}to{transform:translateY(0)}}
+@keyframes welcome-reveal{from{visibility:hidden;opacity:0}to{visibility:visible;opacity:1}}
 @media(max-width:650px){.universe.is-welcome{min-height:calc(100svh - 106px)}#empty.welcome{padding:8px 12px 36px}.welcome-mark{width:250px;max-width:85vw;margin-top:0}h1.welcome-title{letter-spacing:-1.3px}}
-@media(prefers-reduced-motion:reduce){.welcome-node-glow{animation:none}}
+@media(max-height:650px){.welcome-mark{width:auto;max-width:85vw;height:clamp(100px,28svh,190px)}h1.welcome-title{font-size:clamp(26px,6svh,40px);margin:10px 0 20px}#empty.welcome{padding-top:8px;padding-bottom:20px}}
+@media(max-height:450px){.welcome-mark{height:90px}h1.welcome-title{margin:4px 0 12px}#empty.welcome{padding-top:4px;padding-bottom:8px}#empty .welcome-resume{margin-top:8px;padding-top:6px;padding-bottom:6px}}
+@media(prefers-reduced-motion:reduce){.welcome-intro .welcome-content{visibility:visible;opacity:1}.welcome-intro-ready .welcome-mark{transform:none}}
 
 .openalex-access{margin:15px 0;padding:12px 14px;border:1px solid #0787ff44;border-radius:8px;font-size:11px;line-height:1.7}.openalex-access summary{cursor:pointer;color:#bad9ed}.openalex-access p{color:var(--muted)}.openalex-access a{color:#71d9e4}.openalex-access input{width:100%;padding:10px;background:#0a1422;color:var(--ink);border:1px solid var(--line);border-radius:6px;font:12px var(--font)}.openalex-key-actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}.openalex-key-actions button{font-size:11px;padding:8px 12px}.openalex-access small{color:var(--muted);font-size:10px}
 
