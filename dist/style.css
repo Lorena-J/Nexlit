@@ -85,7 +85,7 @@ h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacin
 .welcome-identity{display:flex;flex-direction:column;align-items:center;width:100%;transform-origin:top center;--welcome-final-scale:.4}
 /* The identity keeps its original space so every button stays in place. */
 .welcome-ready .welcome-identity{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}
-.welcome-intro.welcome-ready .welcome-identity{animation:welcome-rise 1.5s cubic-bezier(.45,0,.25,1) .6s both}
+.welcome-intro.welcome-ready .welcome-identity{animation:welcome-rise 1s cubic-bezier(.45,0,.25,1) .6s both}
 @keyframes welcome-rise{from{transform:translateY(0) scale(1)}to{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}}
 .welcome-node-glow{animation:welcome-breathe 6s ease-in-out infinite}
 @keyframes welcome-breathe{0%,100%{opacity:.45}50%{opacity:.8}}
