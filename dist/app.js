@@ -1,3 +1,4 @@
+import {setupChatGPT} from './chatgpt-ui.js?v=44';
 import {separateNodes,visibleLabels} from './graph-layout.js?v=29';
 import {mergeDiscoveryBatch,compileQuery,rankResults} from './discovery-core.js?v=29';
 import {setupDiscovery} from './discovery-ui.js?v=29';
@@ -103,7 +104,7 @@ function rebuild(resetLayout=false){
  $('#empty').hidden=!home;$('#graphHeading').hidden=home;
  // SVGElement does not reflect HTMLElement.hidden; update the actual attribute.
  if(home)$('#graph').setAttribute('hidden','');else $('#graph').removeAttribute('hidden');
- $('#resumeLibrary').disabled=!state.papers.length;$('#resumeLibrary').title=state.papers.length?'':'Your library is empty. Find your first connection to get started.';$('#export').disabled=!state.papers.length;
+ $('#resumeLibrary').disabled=!state.papers.length;$('#resumeLibrary').title=state.papers.length?'':'Your library is empty. Find your first connection to get started.';for(const selector of ['#export','#welcomeExport','#libraryExport'])$(selector).disabled=!state.papers.length;
  if(home){
   positions.clear();projected.clear();nodeEls.clear();edgeEls=[];selected=null;routeLink=null;routeLinks=[];
   $('#nodeLayer').replaceChildren();$('#edgeLayer').replaceChildren();$('#routeLayer').replaceChildren();
@@ -186,7 +187,10 @@ async function fetchMetadata(p){if(!p.doi)return false;const res=await fetch('ht
 function summarizeAbstract(text){const sentences=text.replace(/\s+/g,' ').trim().match(/[^.!?]+(?:[.!?]+(?:\s|$)|$)/g)?.map(s=>s.trim()).filter(Boolean)??[text];if(sentences.length<=4)return sentences.join(' ');const cues=/\b(show|found|demonstrat|result|conclud|suggest|reveal|here|we|report|identify|identified)\w*/i;const scored=sentences.map((s,i)=>({s,i,score:(i===0?3:0)+(i===sentences.length-1?2:0)+(cues.test(s)?2:0)}));return scored.sort((a,b)=>b.score-a.score).slice(0,3).sort((a,b)=>a.i-b.i).map(x=>x.s).join(' ')}
 $('#summarize').onclick=async()=>{const p=state.papers.find(p=>p.id===selected);if(!p)return;const generation=++summaryGeneration,rev=revision;$('#summarize').disabled=true;$('#summarize').textContent='Preparing summary…';const box=$('#summary');box.hidden=false;box.replaceChildren();try{if(!p.abstract&&p.doi){await fetchMetadata(p);if(rev===revision){save();rebuild()}}if(generation!==summaryGeneration||rev!==revision)return;if(p.abstract){box.append(html('small',{},'EXTRACTIVE ABSTRACT SUMMARY'),html('p',{},summarizeAbstract(p.abstract)))}else box.append(html('p',{},'No abstract is available to summarize this paper.'));const url=safeUrl(p);if(url)box.append(html('a',{href:url,target:'_blank',rel:'noopener noreferrer'},'Open paper ↗'))}catch{if(generation===summaryGeneration){box.append(html('p',{},'Could not retrieve the text. Please try again.'));const url=safeUrl(p);if(url)box.append(html('a',{href:url,target:'_blank',rel:'noopener noreferrer'},'Open paper ↗'))}}finally{if(generation===summaryGeneration){$('#summarize').disabled=false;$('#summarize').textContent='Summarize paper ↗';positionCard()}}};
 function replace(data,persist=true){if(persist)home=false;revision++;summaryGeneration++;state=data;state.readingPlan??=[];state.readingEnabled??=state.readingPlan.length>0;chosenTopics.clear();layoutKey='';selected=null;hovered=null;camera={yaw:0,pitch:-.12,zoom:1};focus={x:0,y:0};$('#card').hidden=true;if(persist)save();rebuild(true)}
-$('#welcomeSearch').onclick=()=>$('#discoverOpen').onclick();
+setupChatGPT();
+$('#welcomeSearch').onclick=$('#librarySearch').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#discoverOpen').onclick()};
+$('#welcomeExport').onclick=$('#libraryExport').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#export').onclick()};
+$('#welcomeImport').onclick=$('#libraryImport').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#file').click()};
 $('#resumeLibrary').onclick=()=>{if(state.papers.length){home=false;rebuild(true)}};
 $('#file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('The file exceeds 5 MB.');const text=await file.text(),data=file.name.toLowerCase().endsWith('.json')?validateWorkspace(JSON.parse(text)):{version:1,papers:parseBib(text),manual:[]};if(state.papers.length&&!confirm('Replace the current library? Export a backup if you want to keep it.'))return;replace(data)}catch(error){notice(error.message)}finally{e.target.value=''}};
 $('#export').onclick=()=>{if(!state.papers.length){notice('Import a bibliography first.');return}const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));html('a',{href:url,download:'nexlit-library.json'}).click();setTimeout(()=>URL.revokeObjectURL(url),1000)};

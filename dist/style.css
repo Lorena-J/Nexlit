@@ -95,6 +95,11 @@ h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacin
 #empty .welcome-resume:disabled{opacity:.45;cursor:not-allowed}
 .welcome-intro .welcome-actions{visibility:hidden;opacity:0}
 .welcome-ready:not(.welcome-intro) .welcome-actions{animation:welcome-actions-in .3s ease-out both}
+/* Compact outlined actions sit below the main pair without moving it. */
+.welcome-secondary-actions{position:absolute;top:calc(100% + 16px);left:0;width:100%;display:flex;align-items:center;justify-content:center;gap:10px}
+#empty .welcome-secondary{min-height:36px;padding:9px 12px;border:1px solid var(--welcome-accent);border-radius:7px;color:var(--welcome-accent);font-size:11px;font-weight:500;line-height:1.4;background:transparent;box-shadow:none;transition:background .2s,color .2s,border-color .2s}
+#empty .welcome-secondary:not(:disabled):hover,#empty .welcome-secondary:not(:disabled):focus-visible{background:var(--welcome-accent);border-color:var(--welcome-accent);color:#1d2923;box-shadow:none}
+#empty .welcome-secondary:disabled{opacity:.45;cursor:not-allowed}
 @keyframes welcome-rise{from{transform:translateY(0) scale(1)}to{transform:translateY(var(--welcome-rise,0px)) scale(var(--welcome-final-scale))}}
 @keyframes welcome-actions-in{from{visibility:hidden;opacity:0}to{visibility:visible;opacity:1}}
 @media(max-width:650px){#empty.welcome{padding:12px}.welcome-mark{width:250px;max-width:85vw;margin-top:0}h1.welcome-title{letter-spacing:-1.3px}.welcome-actions{gap:10px;width:calc(100vw - 28px)}#empty .welcome-primary,#empty .welcome-resume{padding:14px 10px}}
@@ -105,3 +110,24 @@ h1.welcome-title{font-size:clamp(36px,5.2vw,64px);line-height:1.12;letter-spacin
 
 /* Labels cannot obscure the selectable circles underneath them. */
 .node .node-label{pointer-events:none;transition:none}.node .hit-target{pointer-events:all}
+
+/* Library controls remain available after leaving the welcome screen. */
+.library-menu{position:relative;font-size:12px}
+.library-menu summary{list-style:none;cursor:pointer;border:1px solid #b7d2bd66;border-radius:7px;padding:11px 15px;color:#b7d2bd}
+.library-menu summary::-webkit-details-marker{display:none}
+.library-menu summary:focus-visible{outline:2px solid #b7d2bd;outline-offset:4px}
+.library-menu-actions{position:absolute;right:0;top:calc(100% + 8px);z-index:20;display:grid;gap:4px;width:180px;padding:8px;border:1px solid #b7d2bd44;border-radius:9px;background:#151e20;box-shadow:0 12px 30px #0005}
+.library-menu-actions button{width:100%;text-align:left}
+#chatgptHeaderOpen{color:#b7d2bd;border-color:#b7d2bd88}
+.chatgpt-dialog{max-width:560px;background:#12181a;color:#e8e8e0;border-color:#b7d2bd55}
+.chatgpt-dialog p{line-height:1.65}
+.chatgpt-actions{display:flex;gap:10px;flex-wrap:wrap;margin:20px 0}
+.chatgpt-dialog select{display:block;width:100%;margin:10px 0;padding:10px;background:#192224;color:#e8e8e0;border:1px solid #b7d2bd66;border-radius:8px}
+.chatgpt-dialog button{border-color:#b7d2bd88;color:#b7d2bd}
+.chatgpt-dialog button:not(:disabled):hover{background:#b7d2bd;color:#1d2923}
+.chatgpt-plan-notice{padding:16px;border:1px solid #b7d2bd;border-radius:10px;margin:18px 0}
+.chatgpt-plan-notice h3{margin-top:0}
+.chatgpt-dialog small{display:block;line-height:1.6;color:#b1bcb7}
+#chatgptStatus{min-height:3em}
+.chatgpt-dialog a{color:#c8bce5}
+@media(max-width:650px){.welcome-secondary-actions{gap:8px}#empty .welcome-secondary{font-size:10px;padding:9px 10px}.header-actions #chatgptHeaderOpen,.library-menu summary{font-size:10px;padding:9px 10px}}
