@@ -20,7 +20,7 @@ function html(tag,attrs={},text){const n=document.createElement(tag);for(const[k
 function svg(tag,attrs={},text){const n=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n}
 function firstAuthor(p){const author=(p.authors||'').split(/\s+and\s+/i)[0].trim();return author.includes(',')?author.split(',')[0].trim():author.split(/\s+/).pop()||p.id}
 function notice(text){clearTimeout(noticeTimer);$('#notice').textContent=text;$('#notice').hidden=!text;if(text)noticeTimer=setTimeout(()=>$('#notice').hidden=true,6500)}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{notice('Could not save. Export a backup to keep your library.')}}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{notice('Could not save your library in this browser.')}}
 function layout(){projectionCache=null;positions.clear();topicCenters.clear();const groups=topicData.groups.filter(g=>!chosenTopics.size||chosenTopics.has(g.id));
  groups.forEach((group,gi)=>{const angle=-Math.PI/2+gi*2*Math.PI/groups.length,multi=groups.length>1;
  const center={x:multi?Math.cos(angle)*375:0,y:multi?Math.sin(angle)*205:0,z:multi?Math.sin(angle*2)*65:0};topicCenters.set(group.id,center);
@@ -104,7 +104,7 @@ function rebuild(resetLayout=false){
  $('#empty').hidden=!home;$('#graphHeading').hidden=home;
  // SVGElement does not reflect HTMLElement.hidden; update the actual attribute.
  if(home)$('#graph').setAttribute('hidden','');else $('#graph').removeAttribute('hidden');
- $('#resumeLibrary').disabled=!state.papers.length;$('#resumeLibrary').title=state.papers.length?'':'Your library is empty. Find your first connection to get started.';for(const selector of ['#export','#welcomeExport','#libraryExport'])$(selector).disabled=!state.papers.length;
+ $('#resumeLibrary').disabled=!state.papers.length;$('#resumeLibrary').title=state.papers.length?'':'Your library is empty. Find your first connection to get started.';
  if(home){
   positions.clear();projected.clear();nodeEls.clear();edgeEls=[];selected=null;routeLink=null;routeLinks=[];
   $('#nodeLayer').replaceChildren();$('#edgeLayer').replaceChildren();$('#routeLayer').replaceChildren();
@@ -189,11 +189,9 @@ $('#summarize').onclick=async()=>{const p=state.papers.find(p=>p.id===selected);
 function replace(data,persist=true){if(persist)home=false;revision++;summaryGeneration++;state=data;state.readingPlan??=[];state.readingEnabled??=state.readingPlan.length>0;chosenTopics.clear();layoutKey='';selected=null;hovered=null;camera={yaw:0,pitch:-.12,zoom:1};focus={x:0,y:0};$('#card').hidden=true;if(persist)save();rebuild(true)}
 setupChatGPT();
 $('#welcomeSearch').onclick=$('#librarySearch').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#discoverOpen').onclick()};
-$('#welcomeExport').onclick=$('#libraryExport').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#export').onclick()};
 $('#welcomeImport').onclick=$('#libraryImport').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#file').click()};
 $('#resumeLibrary').onclick=()=>{if(state.papers.length){home=false;rebuild(true)}};
-$('#file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('The file exceeds 5 MB.');const text=await file.text(),data=file.name.toLowerCase().endsWith('.json')?validateWorkspace(JSON.parse(text)):{version:1,papers:parseBib(text),manual:[]};if(state.papers.length&&!confirm('Replace the current library? Export a backup if you want to keep it.'))return;replace(data)}catch(error){notice(error.message)}finally{e.target.value=''}};
-$('#export').onclick=()=>{if(!state.papers.length){notice('Import a bibliography first.');return}const url=URL.createObjectURL(new Blob([JSON.stringify(state,null,2)],{type:'application/json'}));html('a',{href:url,download:'nexlit-library.json'}).click();setTimeout(()=>URL.revokeObjectURL(url),1000)};
+$('#file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('The file exceeds 5 MB.');const text=await file.text(),data=file.name.toLowerCase().endsWith('.json')?validateWorkspace(JSON.parse(text)):{version:1,papers:parseBib(text),manual:[]};if(state.papers.length&&!confirm('Replace the current library with this bibliography?'))return;replace(data)}catch(error){notice(error.message)}finally{e.target.value=''}};
 $('#enrich').onclick=async()=>{if(busy)return;const papers=state.papers.filter(p=>p.doi&&p.lookup!=='ok');if(!papers.length){notice('Metadata is up to date.');return}busy=true;$('#enrich').disabled=true;$('#file').disabled=true;const rev=revision;let failed=0;try{for(let i=0;i<papers.length;i++){notice(`Updating ${i+1}/${papers.length}…`);try{await fetchMetadata(papers[i])}catch{papers[i].lookup='error';failed++}if(rev!==revision)break;save()}if(rev===revision)rebuild();notice(failed?`Metadata is unavailable for ${failed} references.`:'Metadata is up to date.')}finally{busy=false;$('#enrich').disabled=false;$('#file').disabled=false}};
 $('#allLibrary').onclick=()=>{state.graphPaperIds=null;chosenTopics.clear();save();rebuild(true)};
 setupDiscovery({getPapers:()=>state.papers,addPaper:paper=>{const duplicate=state.papers.find(p=>(p.doi&&paper.doi&&normalizeDoi(p.doi)===normalizeDoi(paper.doi))||p.id===paper.id||p.title.toLowerCase()===paper.title.toLowerCase());if(duplicate)return duplicate;let id=paper.id,suffix=2;while(state.papers.some(p=>p.id===id))id=paper.id+'-'+suffix++;const added={...paper,id};state.papers.push(added);if(home){home=false;state.graphPaperIds=null}save();rebuild(true);return added},createGraph:(incoming,{learning=false,learningPath=null}={})=>{

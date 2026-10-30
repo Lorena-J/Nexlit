@@ -22,19 +22,18 @@ On the first visit in each browser tab, only the original Nexlit logo and “Fol
 - Build a reading path, reorder papers and track what you have read.
 - Use **Learn from scratch** to build a staged path from orientation to advanced readings, with multiple readings per stage, prerequisites and visible gaps. See [learning paths](docs/learning-paths.md).
 - Fetch abstracts and citation metadata from Crossref, and generate short extractive abstract summaries.
-- Export your library, including reading progress, as JSON.
 
 The welcome screen uses a charcoal background with soft sage and lavender accents. The original Nexlit logo keeps its shape and uses the same pastel palette.
 
-Below the two main welcome actions, **Connect ChatGPT**, **Export** and **Import** appear as smaller sage outlined buttons that fill on hover or keyboard focus. Export is disabled until a library contains papers. Import supports BibTeX and Nexlit JSON. In the graph view, connection settings stay in the header and **Library actions** contains Search, Export and Import.
+Below the two main welcome actions, **Connect ChatGPT** and **Import bibliography** appear as smaller sage outlined buttons that fill on hover or keyboard focus. Import supports BibTeX and Nexlit JSON. In the graph view, connection settings stay in the header and **Library actions** contains Search and Import bibliography.
 
-To connect ChatGPT, use Node.js 22 or later and run `npm start`, then open [localhost:8000](http://localhost:8000). Connection settings use your existing local sign-in flow; the button reflects the actual local session and lets you reconnect or disconnect. The Python static preview keeps import, export and search available, but cannot sign in to ChatGPT. See [connection details](docs/chatgpt.md).
+To connect ChatGPT, use Node.js 22 or later and run `npm start`, then open [localhost:8000](http://localhost:8000). Connection settings use your existing local sign-in flow; the button reflects the actual local session and lets you reconnect or disconnect. The Python static preview keeps import and search available, but cannot sign in to ChatGPT. See [connection details](docs/chatgpt.md).
 
 The interface and default search language are English. Spanish queries can optionally be translated through MyMemory. Graph creation compares a larger candidate pool and can return fewer nodes when too few matches are confirmed. See [how search works](docs/search.md) and the [evaluation checklist](docs/search-evaluation.md).
 
 ## Data and current limits
 
-Your library is saved in this browser on this site, without an account or cloud sync. Export a JSON backup before clearing browser data or moving to another device.
+Your library is saved in this browser on this site, without an account or cloud sync. Keep your original bibliography files before clearing browser data or moving to another device.
 
 Searches and metadata requests contact OpenAlex and Crossref; Spanish translation sends the query to MyMemory. These features need internet access and depend on service availability and limits.
 
