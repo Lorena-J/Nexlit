@@ -1,7 +1,7 @@
-import {setupChatGPT} from './chatgpt-ui.js?v=44';
-import {separateNodes,visibleLabels} from './graph-layout.js?v=29';
+import {setupChatGPT} from './chatgpt-ui.js?v=45';
+import {separateNodes,settleNodes,visibleLabels} from './graph-layout.js?v=31';
 import {mergeDiscoveryBatch,compileQuery,rankResults} from './discovery-core.js?v=29';
-import {setupDiscovery} from './discovery-ui.js?v=29';
+import {setupDiscovery} from './discovery-ui.js?v=33';
 import {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan,buildLearningPath,learningOrderIssues} from './core.js?v=29';
 // Keep the existing storage key so the rename preserves saved libraries.
 const $=s=>document.querySelector(s),NS='http://www.w3.org/2000/svg',KEY='atlas-library-v1';
@@ -10,21 +10,24 @@ let home=true;
 let state={version:1,papers:[],manual:[]},edges=[],selected=null,hovered=null,positions=new Map(),nodeEls=new Map(),edgeEls=[],projected=new Map();
 let routeFocus=false,routeLink=null,routeLinks=[],cardDrag=null;const cardPlacements=new Map();
 let topicData={groups:[],assignment:new Map()},chosenTopics=new Set(),topicCenters=new Map(),layoutKey='';
-const palette=['#00d4bd','#0787ff','#8338ff'];
+const palette=['#b7d2bd','#c8bce5','#d3ded2'];
+const topicShadows=['#708779','#867c9b','#8b9688'];
 function graphPapers(){return state.graphPaperIds?state.papers.filter(p=>state.graphPaperIds.includes(p.id)):state.papers}
 function shownPapers(){return graphPapers().filter(p=>!chosenTopics.size||chosenTopics.has(topicData.assignment.get(p.id)))}
+function nodeRadius(id){const hash=[...String(id)].reduce((value,char)=>(value*31+char.charCodeAt(0))>>>0,0);return 10+(hash%5)}
 function orbFor(id){return 'url(#topic-orb-'+topicData.groups.findIndex(g=>g.id===topicData.assignment.get(id))+')'}
-let pointerInGraph=false,projectionCache=null;
+let pointerInGraph=false,pointerInUniverse=false,projectionCache=null,settleDelay=0;
+const separationOffsets=new Map();
 let camera={yaw:0,pitch:-.12,zoom:1},focus={x:0,y:0},drag=null,lastFrame=0,noticeTimer,busy=false,revision=0,summaryGeneration=0;
 function html(tag,attrs={},text){const n=document.createElement(tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n}
 function svg(tag,attrs={},text){const n=document.createElementNS(NS,tag);for(const[k,v]of Object.entries(attrs))n.setAttribute(k,v);if(text!==undefined)n.textContent=text;return n}
 function firstAuthor(p){const author=(p.authors||'').split(/\s+and\s+/i)[0].trim();return author.includes(',')?author.split(',')[0].trim():author.split(/\s+/).pop()||p.id}
 function notice(text){clearTimeout(noticeTimer);$('#notice').textContent=text;$('#notice').hidden=!text;if(text)noticeTimer=setTimeout(()=>$('#notice').hidden=true,6500)}
 function save(){try{localStorage.setItem(KEY,JSON.stringify(state))}catch{notice('Could not save your library in this browser.')}}
-function layout(){projectionCache=null;positions.clear();topicCenters.clear();const groups=topicData.groups.filter(g=>!chosenTopics.size||chosenTopics.has(g.id));
+function layout(){projectionCache=null;separationOffsets.clear();positions.clear();topicCenters.clear();const groups=topicData.groups.filter(g=>!chosenTopics.size||chosenTopics.has(g.id));
  groups.forEach((group,gi)=>{const angle=-Math.PI/2+gi*2*Math.PI/groups.length,multi=groups.length>1;
- const center={x:multi?Math.cos(angle)*375:0,y:multi?Math.sin(angle)*205:0,z:multi?Math.sin(angle*2)*65:0};topicCenters.set(group.id,center);
- const spread=multi?Math.min(125,70+Math.sqrt(group.paperIds.length)*15):Math.min(300,120+Math.sqrt(group.paperIds.length)*35);
+ const center={x:multi?Math.cos(angle)*400:0,y:multi?Math.sin(angle)*200:0,z:multi?Math.sin(angle*2)*65:0};topicCenters.set(group.id,center);
+ const spread=multi?Math.min(105,60+Math.sqrt(group.paperIds.length)*12):Math.min(320,135+Math.sqrt(group.paperIds.length)*35);
  group.paperIds.forEach((id,i)=>{const y=1-2*(i+.5)/group.paperIds.length,a=i*2.399963,r=Math.sqrt(1-y*y);positions.set(id,{x:center.x+Math.cos(a)*r*spread,y:center.y+y*spread*.7,z:center.z+Math.sin(a)*r*spread*.7})});
  });
 }
@@ -112,7 +115,7 @@ function rebuild(resetLayout=false){
   return;
  }
 topicData=groupByContent(graphPapers());$('#allLibrary').hidden=!state.graphPaperIds;chosenTopics=new Set([...chosenTopics].filter(id=>topicData.groups.some(g=>g.id===id)));const papers=shownPapers(),ids=new Set(papers.map(p=>p.id));edges=connections(state.papers,state.manual).filter(e=>ids.has(e.source)&&ids.has(e.target));const key=papers.map(p=>p.id+':'+topicData.assignment.get(p.id)).join('|');if(resetLayout||key!==layoutKey){layout();layoutKey=key}hovered=null;if(selected&&!ids.has(selected)){selected=null;summaryGeneration++;$('#card').hidden=true}renderTopics();$('#empty').hidden=!!state.papers.length;$('#nodeLayer').replaceChildren();$('#edgeLayer').replaceChildren();nodeEls.clear();edgeEls=[];
- const defs=$('#graph').querySelector('defs');defs.querySelectorAll('.topic-gradient').forEach(g=>g.remove());topicData.groups.forEach((group,i)=>{const gradient=svg('radialGradient',{id:'topic-orb-'+i,class:'topic-gradient',cx:'30%',cy:'25%',r:'75%'});gradient.append(svg('stop',{offset:'0','stop-color':'#b5fff1'}),svg('stop',{offset:'.22','stop-color':'#00d4bd'}),svg('stop',{offset:'.5','stop-color':palette[i%palette.length]}),svg('stop',{offset:'.72','stop-color':'#0787ff'}),svg('stop',{offset:'1','stop-color':'#8338ff'}));defs.append(gradient)});
+ const defs=$('#graph').querySelector('defs');defs.querySelectorAll('.topic-gradient').forEach(g=>g.remove());topicData.groups.forEach((group,i)=>{const gradient=svg('radialGradient',{id:'topic-orb-'+i,class:'topic-gradient',cx:'30%',cy:'25%',r:'75%'});gradient.append(svg('stop',{offset:'0','stop-color':'#dfe5d9'}),svg('stop',{offset:'.48','stop-color':palette[i%palette.length]}),svg('stop',{offset:'1','stop-color':topicShadows[i%topicShadows.length]}));defs.append(gradient)});
  for(const edge of edges){const line=svg('line',{class:'edge '+edge.type,'aria-label':edge.reason});if(edge.type==='manual')line.setAttribute('stroke-dasharray','5 5');line.append(svg('title',{},edge.reason));line.onclick=e=>{e.stopPropagation();select(edge.source);notice(edge.reason)};$('#edgeLayer').append(line);edgeEls.push({edge,line})}
  for(const p of papers){const g=svg('g',{class:'node',tabindex:0,role:'button','aria-label':p.title,'data-id':p.id});g.append(svg('circle',{class:'halo',r:65,fill:'url(#halo)'}),svg('circle',{class:'pulse',r:21}),svg('circle',{class:'sphere',r:14,fill:'url(#orb)'}),svg('circle',{class:'hit-target',r:27,fill:'transparent'}));const label=svg('text',{class:'node-label','text-anchor':'middle',y:29},firstAuthor(p)+' · '+(p.year||''));g.append(label,svg('text',{class:'route-number',y:1},''),svg('text',{class:'read-check',x:19,y:-18},''),svg('title',{},p.title));g.onpointerenter=()=>{hovered=p.id;highlight();paint(0)};g.onpointerleave=()=>{hovered=null;highlight();paint(0)};g.onfocus=()=>{hovered=p.id;highlight();paint(0)};g.onblur=()=>{hovered=null;highlight();paint(0)};g.onpointerdown=e=>{e.stopPropagation()};g.onclick=e=>{e.stopPropagation();openReadingArticle(p.id,{route:!!state.readingEnabled&&state.readingPlan.some(item=>item.id===p.id)})};g.onkeydown=e=>{if(['Enter',' '].includes(e.key)){e.preventDefault();openReadingArticle(p.id,{route:!!state.readingEnabled&&state.readingPlan.some(item=>item.id===p.id)})}};$('#nodeLayer').append(g);nodeEls.set(p.id,g)}highlight();updateReading();paint(1)}
 function highlight(){
@@ -133,15 +136,20 @@ function highlight(){
 }
 function project(pos){const cy=Math.cos(camera.yaw),sy=Math.sin(camera.yaw),cp=Math.cos(camera.pitch),sp=Math.sin(camera.pitch),x=pos.x*cy+pos.z*sy,z=pos.z*cy-pos.x*sy,y=pos.y*cp-z*sp,depth=pos.y*sp+z*cp,scale=790/(790-depth);return{x:x*scale*camera.zoom,y:y*scale*camera.zoom,z:depth,scale:scale*camera.zoom}}
 function paint(dt){
- const projectionKey=[camera.yaw,camera.pitch,camera.zoom,selected].join('|');
- if(projectionCache?.key===projectionKey)projected=projectionCache.points;
- else{
- projected=new Map([...positions].map(([id,p])=>[id,project(p)]));
- // Zoom spreads positions without enlarging hit areas over neighbouring nodes.
- const points=[...projected].map(([id,p])=>({id,x:p.x,y:p.y,visualRadius:Math.max(12,Math.min(19,p.scale/camera.zoom*14))*(id===selected?1.6:1),radius:Math.max(22,Math.max(12,Math.min(19,p.scale/camera.zoom*14))*(id===selected?1.6:1))}));
- for(const p of separateNodes(points)){const target=projected.get(p.id);target.x=p.x;target.y=p.y;target.radius=p.visualRadius}
- projectionCache={key:projectionKey,points:projected};
- }
+ const frameDt=Math.max(0,Math.min(.05,dt)),projectionKey=[camera.yaw,camera.pitch,camera.zoom,selected].join('|');
+ const viewChanged=projectionCache?.key!==projectionKey;
+ if(viewChanged){
+  const points=[...positions].map(([id,position])=>{
+   const p=project(position),radius=Math.max(9,Math.min(17,p.scale/camera.zoom*nodeRadius(id)))*(id===selected?1.4:1);
+   return {id,...p,visualRadius:radius,radius:Math.max(22,radius)};
+  });
+  projectionCache={key:projectionKey,points,targets:null};settleDelay=.16;
+ }else settleDelay=Math.max(0,settleDelay-frameDt);
+ // Keep the same screen offsets during rotation; resolve overlaps only after it stops.
+ const initial=!separationOffsets.size,freeze=!!drag||!!hovered||settleDelay>0;
+ if(initial||reduced||!freeze)projectionCache.targets??=separateNodes(projectionCache.points,{gap:14});
+ const display=settleNodes(projectionCache.points,projectionCache.targets||projectionCache.points,separationOffsets,{dt:frameDt,freeze:!initial&&!reduced&&freeze,snap:initial||reduced});
+ projected=new Map(display.map(point=>[point.id,{...point,radius:point.visualRadius}]));
  const active=projected.get(selected),target=active?{x:-active.x*.8,y:-active.y*.65}:{x:0,y:0};
  const ease=pointerInGraph&&(!selected||hovered)?0:reduced?1:1-Math.exp(-dt*4);focus.x+=(target.x-focus.x)*ease;focus.y+=(target.y-focus.y)*ease;
  const labels=[];
@@ -150,13 +158,16 @@ function paint(dt){
   const g=nodeEls.get(id),size=p.radius/14;
   g.setAttribute('transform',`translate(${p.sx} ${p.sy}) scale(${size})`);
   g.querySelector('.hit-target').setAttribute('r',Math.max(22,p.radius)/size);
-  g.style.opacity=g.dataset.dim==='1'?.48:Math.max(.65,Math.min(1,(p.z+420)/650));
+  g.style.opacity=g.dataset.dim==='1'?.4:Math.max(.72,Math.min(1,(p.z+500)/700));
   const label=g.querySelector('.node-label');
   labels.push({id,x:p.sx,y:p.sy+29*size,width:Math.max(40,label.textContent.length*6.5)*size,height:15*size});
  }
- const visible=visibleLabels(labels,{priority:[hovered,selected].filter(Boolean)});
+ const anchors=new Set(topicData.groups.map(group=>group.paperIds[0]));
+ const candidates=labels.filter(label=>label.id===hovered||label.id===selected||!(hovered||selected)||nodeEls.get(label.id).dataset.dim!=='1');
+ candidates.sort((a,b)=>Number(anchors.has(b.id))-Number(anchors.has(a.id)));
+ const visible=visibleLabels(candidates,{priority:[hovered,selected].filter(Boolean),maxLabels:Math.max(4,Math.round(camera.zoom*7))});
  for(const [id,g]of nodeEls)g.querySelector('.node-label').style.opacity=visible.has(id)?'1':'0';
- for(const {edge,line}of edgeEls){const a=projected.get(edge.source),b=projected.get(edge.target);line.setAttribute('x1',a.sx);line.setAttribute('y1',a.sy);line.setAttribute('x2',b.sx);line.setAttribute('y2',b.sy);line.setAttribute('stroke-opacity',line.dataset.active==='1'?.95:.65)}
+ for(const {edge,line}of edgeEls){const a=projected.get(edge.source),b=projected.get(edge.target);line.setAttribute('x1',a.sx);line.setAttribute('y1',a.sy);line.setAttribute('x2',b.sx);line.setAttribute('y2',b.sy);line.setAttribute('stroke-opacity',line.dataset.active==='1'?.62:(hovered||selected)?.07:.2)}
  for(const link of routeLinks){const a=projected.get(link.source),b=projected.get(link.target);if(a&&b){link.line.setAttribute('x1',a.sx);link.line.setAttribute('y1',a.sy);link.line.setAttribute('x2',b.sx);link.line.setAttribute('y2',b.sy)}}
  // Keep node elements attached: reparenting during animation interrupts pointer clicks and focus.
  if(selected)positionCard();}
@@ -180,21 +191,23 @@ $('#zoomIn').onclick=()=>setZoom(camera.zoom*1.35);
 $('#zoomOut').onclick=()=>setZoom(camera.zoom/1.35);
 $('#graph').addEventListener('pointerenter',()=>{pointerInGraph=true});
 $('#graph').addEventListener('pointerleave',()=>{pointerInGraph=false});
-function animate(t){const dt=Math.min(.05,(t-lastFrame)/1000||.016);lastFrame=t;if(!home&&!reduced&&!selected&&!hovered&&!drag&&!pointerInGraph)camera.yaw+=dt*.045;if(!home&&!document.hidden&&state.papers.length)paint(dt);requestAnimationFrame(animate)}if(!reduced)requestAnimationFrame(animate);new ResizeObserver(()=>{if(state.papers.length)paint(1)}).observe($('.universe'));
+$('.universe').addEventListener('pointerenter',()=>{pointerInUniverse=true});
+$('.universe').addEventListener('pointerleave',()=>{pointerInUniverse=false});
+function animate(t){const dt=Math.min(.05,(t-lastFrame)/1000||.016);lastFrame=t;if(!home&&!document.hidden&&!reduced&&!selected&&!hovered&&!drag&&!pointerInGraph&&!pointerInUniverse&&!document.activeElement?.closest?.('.universe,header,dialog')&&!$('#discoverDialog').open&&!$('#chatgptDialog').open)camera.yaw+=dt*.012;if(!home&&!document.hidden&&state.papers.length)paint(dt);requestAnimationFrame(animate)}if(!reduced)requestAnimationFrame(animate);new ResizeObserver(()=>{if(state.papers.length)paint(1)}).observe($('.universe'));
 function safeUrl(p){try{const u=new URL(p.doi?'https://doi.org/'+p.doi:p.url);return ['https:','http:'].includes(u.protocol)?u.href:null}catch{return null}}
 async function fetchMetadata(p){if(!p.doi)return false;const res=await fetch('https://api.crossref.org/works/'+encodeURIComponent(normalizeDoi(p.doi)),{signal:AbortSignal.timeout(16000)});if(!res.ok)throw Error('Crossref unavailable');const {message:m}=await res.json();if(m.abstract){const doc=new DOMParser().parseFromString(m.abstract,'text/html');p.abstract=(doc.body.textContent||'').trim()}p.references=(m.reference??[]).map(r=>normalizeDoi(r.DOI??'')).filter(Boolean);p.lookup='ok';p.lookupDate=new Date().toISOString();return true}
 // Extractive summary: retain original sentences rather than infer findings from a title.
 function summarizeAbstract(text){const sentences=text.replace(/\s+/g,' ').trim().match(/[^.!?]+(?:[.!?]+(?:\s|$)|$)/g)?.map(s=>s.trim()).filter(Boolean)??[text];if(sentences.length<=4)return sentences.join(' ');const cues=/\b(show|found|demonstrat|result|conclud|suggest|reveal|here|we|report|identify|identified)\w*/i;const scored=sentences.map((s,i)=>({s,i,score:(i===0?3:0)+(i===sentences.length-1?2:0)+(cues.test(s)?2:0)}));return scored.sort((a,b)=>b.score-a.score).slice(0,3).sort((a,b)=>a.i-b.i).map(x=>x.s).join(' ')}
 $('#summarize').onclick=async()=>{const p=state.papers.find(p=>p.id===selected);if(!p)return;const generation=++summaryGeneration,rev=revision;$('#summarize').disabled=true;$('#summarize').textContent='Preparing summary…';const box=$('#summary');box.hidden=false;box.replaceChildren();try{if(!p.abstract&&p.doi){await fetchMetadata(p);if(rev===revision){save();rebuild()}}if(generation!==summaryGeneration||rev!==revision)return;if(p.abstract){box.append(html('small',{},'EXTRACTIVE ABSTRACT SUMMARY'),html('p',{},summarizeAbstract(p.abstract)))}else box.append(html('p',{},'No abstract is available to summarize this paper.'));const url=safeUrl(p);if(url)box.append(html('a',{href:url,target:'_blank',rel:'noopener noreferrer'},'Open paper ↗'))}catch{if(generation===summaryGeneration){box.append(html('p',{},'Could not retrieve the text. Please try again.'));const url=safeUrl(p);if(url)box.append(html('a',{href:url,target:'_blank',rel:'noopener noreferrer'},'Open paper ↗'))}}finally{if(generation===summaryGeneration){$('#summarize').disabled=false;$('#summarize').textContent='Summarize paper ↗';positionCard()}}};
 function replace(data,persist=true){if(persist)home=false;revision++;summaryGeneration++;state=data;state.readingPlan??=[];state.readingEnabled??=state.readingPlan.length>0;chosenTopics.clear();layoutKey='';selected=null;hovered=null;camera={yaw:0,pitch:-.12,zoom:1};focus={x:0,y:0};$('#card').hidden=true;if(persist)save();rebuild(true)}
-setupChatGPT();
+const chatgpt = setupChatGPT();
 $('#welcomeSearch').onclick=$('#librarySearch').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#discoverOpen').onclick()};
 $('#welcomeImport').onclick=$('#libraryImport').onclick=()=>{$('#libraryMenu').removeAttribute('open');$('#file').click()};
 $('#resumeLibrary').onclick=()=>{if(state.papers.length){home=false;rebuild(true)}};
 $('#file').onchange=async e=>{const file=e.target.files[0];if(!file)return;try{if(file.size>5e6)throw Error('The file exceeds 5 MB.');const text=await file.text(),data=file.name.toLowerCase().endsWith('.json')?validateWorkspace(JSON.parse(text)):{version:1,papers:parseBib(text),manual:[]};if(state.papers.length&&!confirm('Replace the current library with this bibliography?'))return;replace(data)}catch(error){notice(error.message)}finally{e.target.value=''}};
 $('#enrich').onclick=async()=>{if(busy)return;const papers=state.papers.filter(p=>p.doi&&p.lookup!=='ok');if(!papers.length){notice('Metadata is up to date.');return}busy=true;$('#enrich').disabled=true;$('#file').disabled=true;const rev=revision;let failed=0;try{for(let i=0;i<papers.length;i++){notice(`Updating ${i+1}/${papers.length}…`);try{await fetchMetadata(papers[i])}catch{papers[i].lookup='error';failed++}if(rev!==revision)break;save()}if(rev===revision)rebuild();notice(failed?`Metadata is unavailable for ${failed} references.`:'Metadata is up to date.')}finally{busy=false;$('#enrich').disabled=false;$('#file').disabled=false}};
 $('#allLibrary').onclick=()=>{state.graphPaperIds=null;chosenTopics.clear();save();rebuild(true)};
-setupDiscovery({getPapers:()=>state.papers,addPaper:paper=>{const duplicate=state.papers.find(p=>(p.doi&&paper.doi&&normalizeDoi(p.doi)===normalizeDoi(paper.doi))||p.id===paper.id||p.title.toLowerCase()===paper.title.toLowerCase());if(duplicate)return duplicate;let id=paper.id,suffix=2;while(state.papers.some(p=>p.id===id))id=paper.id+'-'+suffix++;const added={...paper,id};state.papers.push(added);if(home){home=false;state.graphPaperIds=null}save();rebuild(true);return added},createGraph:(incoming,{learning=false,learningPath=null}={})=>{
+setupDiscovery({ensureConnected:()=>chatgpt.ensureConnected(),getPapers:()=>state.papers,addPaper:paper=>{const duplicate=state.papers.find(p=>(p.doi&&paper.doi&&normalizeDoi(p.doi)===normalizeDoi(paper.doi))||p.id===paper.id||p.title.toLowerCase()===paper.title.toLowerCase());if(duplicate)return duplicate;let id=paper.id,suffix=2;while(state.papers.some(p=>p.id===id))id=paper.id+'-'+suffix++;const added={...paper,id};state.papers.push(added);if(home){home=false;state.graphPaperIds=null}save();rebuild(true);return added},createGraph:(incoming,{learning=false,learningPath=null}={})=>{
  const report=learning?(learningPath||buildLearningPath(incoming,{subject:incoming[0]?.topic?.label||''})):null;
  if(learning&&!report.steps.length){notice('No supported beginner entry was found. The existing library and path were kept.');return}
  home=false;const merged=mergeDiscoveryBatch(state.papers,incoming);

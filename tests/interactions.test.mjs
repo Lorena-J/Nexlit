@@ -1,4 +1,4 @@
-import {separateNodes,visibleLabels} from '../dist/graph-layout.js';
+import {separateNodes,settleNodes,visibleLabels} from '../dist/graph-layout.js';
 import {createOpenAlexClient as realOpenAlexClient} from '../dist/openalex-client.js';
 const createOpenAlexClient=options=>realOpenAlexClient({...options,cacheTTL:0,minInterval:0});
 import * as discoveryCore from '../dist/discovery-core.js';
@@ -35,7 +35,7 @@ elements.set('.universe',new Element());elements.get('#graph').append(new Elemen
 const papers=core.parseBib(readFileSync(new URL('../dist/example.bib',import.meta.url),'utf8'));
 papers[0].abstract='We studied hippocampal representations. We found a distinct population response. These results support social memory processing.';
 let animation,savedState;const docHandlers=new Map();
-const context=vm.createContext({separateNodes,visibleLabels,core,console,setupChatGPT:()=>{},discoveryConfig:null,discoveryMerge:mergeDiscoveryBatch,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(type,fn){if(!docHandlers.has(type))docHandlers.set(type,[]);docHandlers.get(type).push(fn)}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
+const context=vm.createContext({separateNodes,visibleLabels,settleNodes,core,console,setupChatGPT:()=>({ensureConnected:async()=>true}),discoveryConfig:null,discoveryMerge:mergeDiscoveryBatch,document:{hidden:false,querySelector:s=>elements.get(s),createElement:t=>new Element(t),createElementNS:(_,t)=>new Element(t),addEventListener(type,fn){if(!docHandlers.has(type))docHandlers.set(type,[]);docHandlers.get(type).push(fn)}},localStorage:{getItem:()=>JSON.stringify({version:1,papers,manual:[]}),setItem(key,value){savedState=JSON.parse(value)}},matchMedia:()=>({matches:false}),ResizeObserver:class{observe(){}},requestAnimationFrame:fn=>animation=fn,innerWidth:1200,setTimeout,clearTimeout,URL,Blob,confirm:()=>true});
 const source="const {parseBib,connections,validateWorkspace,normalizeDoi,groupByContent,suggestReadingPlan,buildLearningPath,learningOrderIssues}=core;const mergeDiscoveryBatch=discoveryMerge;const setupDiscovery=config=>{discoveryConfig=config};\n"+readFileSync(new URL('../dist/app.js',import.meta.url),'utf8').replace(/^import[^\n]+\n/gm,'');
 await vm.runInContext('(async()=>{'+source+'})()',context);
 assert.equal(elements.get('#empty').hidden,false);
@@ -69,6 +69,8 @@ console.log('11 nodes: clicks, cards, keyboard access and summaries pass. Animat
 // Zoom separates centres without making their click targets swallow their neighbours.
 elements.get('#closeCard').onclick();
 elements.get('#graph').handlers.pointerenter();animation(1900);
+assert(nodes.filter(node=>node.querySelector('.node-label').style.opacity==='1').length<=7,'Resting view keeps labels sparse');
+assert(elements.get('#edgeLayer').children.every(edge=>Number(edge.attrs['stroke-opacity'])<=.2),'Connections stay subtle at rest');
 const before=nodes.map(node=>node.attrs.transform);
 animation(1916);assert.deepEqual(nodes.map(node=>node.attrs.transform),before,'Rotation must stop while the pointer is in the graph');
 const beforeRadius=Number(nodes[0].querySelector('.hit-target').attrs.r);
@@ -79,8 +81,31 @@ for(let i=0;i<8;i++)elements.get('#zoomOut').onclick();
 elements.get('#fit').onclick();
 nodes[0].onpointerenter();animation(1932);
 assert.equal(nodes[0].querySelector('.node-label').style.opacity,'1','The hovered label must remain readable');
+const focusEdges=elements.get('#edgeLayer').children;
+assert(focusEdges.filter(edge=>edge.dataset.active==='1').every(edge=>Number(edge.attrs['stroke-opacity'])>.5),'The explored paper connections gain emphasis');
+assert(focusEdges.filter(edge=>edge.dataset.active==='0').every(edge=>Number(edge.attrs['stroke-opacity'])<.1),'Unrelated connections fade without disappearing');
 nodes[0].onpointerleave();elements.get('#graph').handlers.pointerleave();
 console.log('Dense graph controls: stationary hover, constant-size zoom targets and hovered labels pass.');
+// Rotating carries existing separation offsets with the projection instead of resolving anew.
+elements.get('#graph').handlers.pointerenter();
+const nodePositions=()=>nodes.map(node=>node.attrs.transform.match(/translate\(([^ ]+) ([^)]+)\)/).slice(1).map(Number));
+let lastDragPositions=nodePositions();
+const background={closest:()=>false};
+elements.get('#graph').handlers.pointerdown({...event,target:background,button:0,clientX:100,clientY:100,pointerId:1});
+for(let i=0;i<20;i++){
+ elements.get('#graph').handlers.pointermove({clientX:100+i*4,clientY:100+i,pointerId:1});animation(2000+i*16);
+ const currentPositions=nodePositions();
+ assert(currentPositions.every((point,index)=>Math.hypot(point[0]-lastDragPositions[index][0],point[1]-lastDragPositions[index][1])<25),'Small drag steps must not cause position jumps');
+ lastDragPositions=currentPositions;
+}
+const atRelease=nodes.map(node=>node.attrs.transform);
+elements.get('#graph').handlers.pointerup({target:background,pointerId:1});
+animation(2320);assert.deepEqual(nodes.map(node=>node.attrs.transform),atRelease,'No jump on release');
+for(let i=0;i<120;i++)animation(2336+i*16);
+const settledTransforms=nodes.map(node=>node.attrs.transform);
+animation(4300);assert.deepEqual(nodes.map(node=>node.attrs.transform),settledTransforms,'Settled nodes stop drifting');
+elements.get('#graph').handlers.pointerleave();
+
 
 
 const topicList=elements.get('#topicsList');
@@ -160,7 +185,7 @@ const relationshipCount=elements.get('#edgeLayer').children.length;
 assert(relationshipCount>0,'Learning graphs must retain their topic/citation connections');
 const assertRelationshipsVisible=()=>{
  assert.equal(elements.get('#edgeLayer').children.length,relationshipCount);
- assert(elements.get('#edgeLayer').children.every(edge=>Number(edge.attrs['stroke-opacity'])>=.65),'All relationship lines must remain clearly visible, including edges outside the selection');
+ assert(elements.get('#edgeLayer').children.every(edge=>Number(edge.attrs['stroke-opacity'])>0),'All relationship lines stay present, including edges outside the selection');
  assert(elements.get('#edgeLayer').children.every(edge=>edge.style.pointerEvents!=='none'),'Relationship lines must stay interactive');
 };
 assert.equal(elements.get('#routeLayer').children.length,0,'No reading-order arrows before selecting a step');
@@ -231,8 +256,7 @@ elements.get('#welcomeSearch').onclick();assert.equal(welcomeSearches,1);
 console.log('Welcome: saved libraries resume explicitly, first visits make no demo requests, and the main action opens search.');
 
 // Exercise the real app and discovery controller together, without mocking createGraph.
-for(const id of ['#discoverInput','#discoverQuery','#discoverFoundation'])elements.get(id).value='';
-elements.get('#discoverInputLanguage').value='en';elements.get('#discoverBreadth').value='precise';
+for(const id of ['#discoverInput','#discoverFoundation'])elements.get(id).value='';
 elements.get('#discoverGraphCount').value='2';elements.get('#discoverCandidateCount').value='100';
 elements.get('#graph').setAttribute('hidden','');
 let createdLibrary=null,searchRequests=0;

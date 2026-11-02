@@ -2,6 +2,13 @@ export function setupChatGPT({onChange = () => {}} = {}) {
   const $ = s => document.querySelector(s), dialog = $('#chatgptDialog');
   let status = {available: false, signedIn: false, planGranted: false}, models = [], model = '', timer, polling = false, refreshing = false;
   const listeners = new Set();
+  let connectionGate = null, resolveConnection = null;
+  function finishConnection(connected) {
+    const resolve = resolveConnection; connectionGate = null; resolveConnection = null;
+    resolve?.(connected);
+    if (connected && resolve) dialog.close();
+  }
+  dialog.addEventListener('close', () => finishConnection(false));
   const message = text => { $('#chatgptStatus').textContent = text; };
   async function api(path, body, signal) {
     const response = await fetch('/api/chatgpt/' + path, {method: body === undefined ? 'GET' : 'POST', headers: {'X-Nexlit-Request': '1', ...(body === undefined ? {} : {'Content-Type': 'application/json'})}, ...(body === undefined ? {} : {body: JSON.stringify(body)}), signal: signal || AbortSignal.timeout(35_000)});
@@ -26,6 +33,7 @@ export function setupChatGPT({onChange = () => {}} = {}) {
     $('#chatgptModel').disabled = !models.length;
     onChange();
     for (const listener of listeners) listener();
+    if (status.planGranted && status.welcomeSeen) finishConnection(true);
   }
   async function loadModels() {
     models = []; $('#chatgptModel').replaceChildren(); render();
@@ -43,7 +51,7 @@ export function setupChatGPT({onChange = () => {}} = {}) {
       if (!status.available) throw Error('Local service unavailable.');
       render();
       if (status.pending) message('Finish signing in in the new tab. You can return here afterwards.');
-      else if (status.loginError) message(status.loginError);
+      else if (status.loginError) { message(status.loginError); finishConnection(false); }
       else if (status.planGranted) message('ChatGPT is connected. Manage your account and plan settings here.');
       else if (status.signedIn) message('Plan usage was not granted. Reconnect with ChatGPT and allow plan usage.');
       else message('Connect your ChatGPT account and allow access to your plan.');
@@ -64,7 +72,7 @@ export function setupChatGPT({onChange = () => {}} = {}) {
   $('#chatgptConnect').onclick = async () => {
     // Open synchronously to avoid popup blockers while the local request runs.
     const popup = window.open('about:blank', '_blank');
-    if (!popup) { message('Allow popups for Nexlit, then try connecting again.'); return; }
+    if (!popup) { message('Allow popups for Nexlit, then try connecting again.'); finishConnection(false); return; }
     popup.opener = null;
     $('#chatgptConnect').disabled = true;
     try {
@@ -72,10 +80,11 @@ export function setupChatGPT({onChange = () => {}} = {}) {
       popup.location.href = data.url;
       status.pending = true; render(); message('Finish signing in in the new tab.');
       clearTimeout(timer); polling = true; timer = setTimeout(refresh, 1500);
-    } catch (e) { popup.close(); message(e.message); }
+    } catch (e) { popup.close(); message(e.message); finishConnection(false); }
     finally { $('#chatgptConnect').disabled = false; }
   };
   $('#chatgptCancel').onclick = async () => {
+    finishConnection(false);
     try { await api('cancel', {}); clearTimeout(timer); polling = false; await refresh(); }
     catch (e) { message(e.message); }
   };
@@ -99,6 +108,18 @@ export function setupChatGPT({onChange = () => {}} = {}) {
   };
   void refresh();
   return {
+    ensureConnected() {
+      if (status.planGranted && status.welcomeSeen) return Promise.resolve(true);
+      if (connectionGate) return connectionGate;
+      const waiting = connectionGate = new Promise(resolve => { resolveConnection = resolve; });
+      if (!dialog.open) dialog.showModal();
+      if (!status.planGranted && !status.pending && !$('#chatgptConnect').disabled) void $('#chatgptConnect').onclick();
+      else {
+        if (status.pending) { clearTimeout(timer); polling = true; }
+        void refresh();
+      }
+      return waiting;
+    },
     enabled: () => !!status.planGranted,
     model: () => model,
     models: () => models,

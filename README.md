@@ -5,10 +5,10 @@ Nexlit is an early version built with plain HTML, CSS and JavaScript: no build s
 
 ## Run locally
 
-With Python 3 installed, run this from the project folder:
+With Node.js 22 or later, run this from the project folder:
 
 ```sh
-python3 -m http.server 8000 --directory dist
+npm start
 ```
 
 Open [localhost:8000](http://localhost:8000). The welcome screen opens without a graph. Search for papers, import a bibliography, or choose **Continue exploring your library** to return to saved work. A sample BibTeX file is available at `dist/example.bib`.
@@ -17,33 +17,33 @@ On the first visit in each browser tab, only the original Nexlit logo and “Fol
 
 ## What you can do
 
-- Search OpenAlex with Precise, Balanced or Exploratory mode; keep phrases in quotes and edit Boolean queries. You can also import BibTeX or Nexlit JSON libraries.
-- Rotate the graph, zoom with the wheel or +/− buttons, and filter by topic. Nodes stay separated, overlapping labels are reduced, and rotation pauses while your pointer is over the graph. Open a node to explore a paper.
+- Choose **Find your first connection**, enter an English topic or Boolean query in the single **What would you like to explore?** field, then choose **Search papers**. Connect ChatGPT when prompted; the search continues after sign-in and the plan-use acknowledgement. You can also import BibTeX or Nexlit JSON libraries.
+- Explore a charcoal, sage and lavender constellation with subtle connections and softly shaded nodes. Hover or select a paper to emphasize its relationships. Zoom reveals more labels. Rotation pauses during interaction; overlap adjustments wait until rotation stops, then settle smoothly, pausing on article hover. Open a node to explore a paper.
 - Build a reading path, reorder papers and track what you have read.
-- Use **Learn from scratch** to build a staged path from orientation to advanced readings, with multiple readings per stage, prerequisites and visible gaps. See [learning paths](docs/learning-paths.md).
+- Turn on **Learn from scratch** to reveal the **Knowledge area** field. The planner builds a staged path from orientation to advanced readings; the reading panel shows progress and gaps after creation. See [learning paths](docs/learning-paths.md).
 - Fetch abstracts and citation metadata from Crossref, and generate short extractive abstract summaries.
 
-The welcome screen uses a charcoal background with soft sage and lavender accents. The original Nexlit logo keeps its shape and uses the same pastel palette.
+The welcome screen, search dialog and graph use a charcoal background with soft sage and lavender accents. The original Nexlit logo keeps its shape and uses the same pastel palette.
 
 Below the two main welcome actions, **Connect ChatGPT** and **Import bibliography** appear as smaller sage outlined buttons that fill on hover or keyboard focus. Import supports BibTeX and Nexlit JSON. In the graph view, connection settings stay in the header and **Library actions** contains Search and Import bibliography.
 
-To connect ChatGPT, use Node.js 22 or later and run `npm start`, then open [localhost:8000](http://localhost:8000). Connection settings use your existing local sign-in flow; the button reflects the actual local session and lets you reconnect or disconnect. The Python static preview keeps import and search available, but cannot sign in to ChatGPT. See [connection details](docs/chatgpt.md).
+**Search papers** requires the local Node.js service and a ChatGPT connection. If already connected, the search proceeds directly. Canceling or closing sign-in keeps the query without searching. A static preview can still import and explore bibliographies, but cannot sign in or run a new search. See [connection details](docs/chatgpt.md).
 
-The interface and default search language are English. Spanish queries can optionally be translated through MyMemory. Graph creation compares a larger candidate pool and can return fewer nodes when too few matches are confirmed. See [how search works](docs/search.md) and the [evaluation checklist](docs/search-evaluation.md).
+The interface, input and results are English; there is no language selector or automatic translation. Search uses Balanced matching internally, and explicit Boolean syntax can be entered directly. Graph creation compares a larger candidate pool and can return fewer nodes when too few matches are confirmed. See [how search works](docs/search.md) and the [evaluation checklist](docs/search-evaluation.md).
 
 ## Data and current limits
 
 Your library is saved in this browser on this site, without an account or cloud sync. Keep your original bibliography files before clearing browser data or moving to another device.
 
-Searches and metadata requests contact OpenAlex and Crossref; Spanish translation sends the query to MyMemory. These features need internet access and depend on service availability and limits.
+Searches and metadata requests contact OpenAlex and Crossref. These features need internet access and depend on service availability and limits. Connecting ChatGPT does not replace the bibliographic provider or its request quota.
 
-For reliable search, open **Search papers → OpenAlex access** and add your [free personal OpenAlex API key](https://openalex.org/settings/api) after verifying your email. Anonymous searches share a daily network budget; once exhausted, waiting a few seconds will not help. The key stays in this browser tab’s session, is sent only to OpenAlex, and is excluded from library exports. Remove it with **Remove key**. Search responses are cached in memory for 15 minutes.
+OpenAlex access controls are no longer shown in the simplified search dialog. Anonymous requests share a daily network budget; an exhausted budget is shown as an error. An existing personal key in this tab's session continues to be used, but the dialog cannot add or remove keys. Search responses are cached in memory for 15 minutes.
 
 Topic links and reading suggestions use metadata and simple heuristics. A topic link does not necessarily mean a citation. Summaries extract sentences from available abstracts, rather than analyzing full papers. This is a working prototype with further improvements planned.
 
 ## Development
 
-The complete static app is in `dist/`; edit those files directly. Any static web host can serve that folder. Tests are in `tests/` and use mocked services and DOM elements.
+The browser app is in `dist/`; edit those files directly. The loopback Node.js service in `server/` serves it and handles ChatGPT sign-in. Tests are in `tests/` and use mocked services and DOM elements; authentication tests also use signed synthetic credentials and a local HTTP server.
 
 With Node.js 22 or later, run:
 
