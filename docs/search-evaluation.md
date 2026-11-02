@@ -2,7 +2,7 @@
 
 The automated tests cover controlled examples and interaction regressions. They do **not** establish improved relevance on real publications. This checklist is the starting set for a human-reviewed baseline.
 
-Run each query in Precise mode with a 100-candidate pool. Record the date, query, retrieved IDs and order, and label the first 10 candidates as **useful**, **uncertain** or **irrelevant** after reading their titles and abstracts. Keep uncertain judgments separate. Save the same candidate metadata to compare later ranking changes without changes in OpenAlex affecting the comparison.
+Run each explicit Boolean query below in the main input with a 100-candidate pool. There is no scope selector in the simplified dialog; explicit AND/OR/NOT controls the query. Record the date, query, retrieved IDs and order, and label the first 10 candidates as **useful**, **uncertain** or **irrelevant** after reading their titles and abstracts. Keep uncertain judgments separate. Save the same candidate metadata to compare later ranking changes without changes in OpenAlex affecting the comparison.
 
 | # | Query | What a useful result should address |
 | --- | --- | --- |
@@ -29,6 +29,6 @@ Run each query in Precise mode with a 100-candidate pool. Record the date, query
 
 For each query, report useful results / 10 (**precision@10**, with missing slots counting as not useful), number retrieved, number locally confirmed, graph size, latency and API requests. If known relevant papers are available, record their IDs before testing and track whether they appear in the candidate pool. Investigate failures before expanding the set or tuning weights.
 
-Also repeat selected queries in Balanced and Exploratory modes. Check that broader retrieval adds useful coverage rather than merely increasing the result count. Include cases with no abstracts, plural variants, near-matching phrases, preprints and highly cited off-topic papers.
+Also repeat selected queries with unstructured input (Balanced matching) and explicit OR alternatives. Check that broader retrieval adds useful coverage rather than merely increasing the result count. Include cases with no abstracts, plural variants, near-matching phrases, preprints and highly cited off-topic papers.
 
 No real-publication relevance judgments have been recorded yet. Synthetic passing tests must not be reported as a precision improvement on this set.
