@@ -1,20 +1,14 @@
 # How search works
 
-Nexlit searches OpenAlex titles, abstracts and keywords. It keeps the proposed query visible and editable. It does not interpret a project semantically or add synonyms automatically.
+Nexlit searches OpenAlex titles, abstracts and keywords from the single **What would you like to explore?** field in **Your first connection**. **Search papers** first requires a ChatGPT connection and plan-use acknowledgement, opening sign-in when needed, then continues the metadata search. Search remains deterministic; signing in does not turn it into an AI-generated search.
 
-## Query modes
+## English query input
 
-For `"social memory" hippocampus sleep`:
-
-| Mode | Generated query |
-| --- | --- |
-| Precise | `"social memory" AND hippocampus AND sleep` |
-| Balanced (default) | `"social memory" AND (hippocampus OR sleep)` |
-| Exploratory | `"social memory" OR hippocampus OR sleep` |
+Input and results are English, without a language selector or translation. There are no subject/project tabs, suggested-query editor or scope selector. Balanced matching is used internally. For `"social memory" hippocampus sleep`, the generated query is `"social memory" AND (hippocampus OR sleep)`.
 
 Balanced uses the first concept as the anchor. With two concepts it requires both; with one it requires that concept. Reorder the input to choose another anchor. Words in quotes stay together. Plain-language filler words are removed; this is a deterministic word parser, not a language model.
 
-An explicit query such as `("social memory" OR "social recognition") AND hippocampus NOT sleep` overrides the mode. Nexlit supports quoted phrases, parentheses and uppercase AND/OR/NOT, with NOT before AND before OR. Adjacent concepts imply AND. Other advanced syntax, such as wildcards and proximity operators, is rejected with an explanation. Boolean queries have a 32-positive-concept / 3,000-encoded-character limit. Only English results are retained. Spanish input can be translated with MyMemory; review the English query, particularly its phrases and operators.
+An explicit query such as `("social memory" OR "social recognition") AND hippocampus NOT sleep` overrides the default matching. Nexlit supports quoted phrases, parentheses and uppercase AND/OR/NOT, with NOT before AND before OR. Adjacent concepts imply AND. Other advanced syntax, such as wildcards and proximity operators, is rejected with an explanation. Boolean queries have a 32-positive-concept / 3,000-encoded-character limit. Only English results are retained.
 
 ## Ranking and graph selection
 
@@ -25,15 +19,15 @@ An explicit query such as `("social memory" OR "social recognition") AND hippoca
 5. Before creating a graph, the main search expands toward a pool of 100, 200 or 500 candidates, selected in the dialog. The pool target is at least the requested node count. Expansion is bounded by the corresponding provider pages, even if responses contain duplicates. Any candidates already loaded remain available to rank.
 6. The best confirmed matches are selected, up to the requested count. A smaller graph is allowed when too few candidates qualify. With no confirmed matches, Nexlit asks you to refine the search. It never silently broadens the query.
 
-Each search or graph comparison has a 60-second timeout and can be canceled. Changing the query, mode or input language invalidates old candidates. A failed expansion keeps previously loaded results for retry.
+Each search or graph comparison has a 60-second timeout and can be canceled. Changing the query invalidates old candidates. A failed expansion keeps previously loaded results for retry.
 
 ## OpenAlex access and quotas
 
-Open **OpenAlex access** in the search dialog to add your personal key from [OpenAlex settings](https://openalex.org/settings/api). Verify your OpenAlex email before using the key. It is kept in this tab's session storage and sent only to the OpenAlex API in an authorization header; it is excluded from library JSON and exports. Use **Remove key** to return to anonymous access.
+The simplified dialog does not expose OpenAlex access controls. Anonymous requests share a daily network budget. A daily-budget error shows the reset time in UTC; repeating a request cannot restore that budget. Connecting ChatGPT does not grant additional OpenAlex quota.
 
-Anonymous requests share a daily network budget. A daily-budget error shows the reset time in UTC and opens the access controls; repeating a request cannot restore that budget. Temporary frequency limits receive at most two retries with short backoff. Requests are paced, and successful responses are cached in memory for 15 minutes, with a maximum of 50 entries. Changing the key clears that cache and the locally remembered quota block. Reloading the page clears the response cache.
+An existing personal key in `nexlit-openalex-key` session storage is still read by the client and sent only to OpenAlex in an authorization header. The dialog no longer offers a way to add or remove it. Tokens and keys are excluded from imported library data.
 
-The personal key uses your own OpenAlex allowance, which can also be exhausted. Nexlit does not include a shared application key or require a backend. See [OpenAlex authentication](https://help.openalex.org/api/authentication/).
+Temporary frequency limits receive at most two retries with short backoff. Requests are paced, and successful responses are cached in memory for 15 minutes, with a maximum of 50 entries. Reloading the page clears the response cache. See [OpenAlex authentication](https://help.openalex.org/api/authentication/).
 
 ## Current limits
 

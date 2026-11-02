@@ -42,7 +42,7 @@ export function separateNodes(points,{gap=10,passes=8}={}){
  return nodes;
 }
 
-export function visibleLabels(points,{priority=[]}={}){
+export function visibleLabels(points,{priority=[],maxLabels=Infinity}={}){
  const ordered=[...points].sort((a,b)=>{
   const ai=priority.indexOf(a.id),bi=priority.indexOf(b.id);
   return (ai<0?Infinity:ai)-(bi<0?Infinity:bi);
@@ -51,7 +51,21 @@ export function visibleLabels(points,{priority=[]}={}){
  for(const point of ordered){
   const {id,x,y,width,height}=point,box={left:x-width/2,right:x+width/2,top:y,bottom:y+height};
   const collides=occupied.some(other=>box.left<other.right+6&&box.right>other.left-6&&box.top<other.bottom+4&&box.bottom>other.top-4);
-  if(priority.includes(id)||!collides){visible.add(id);occupied.push(box)}
+  if(priority.includes(id)||(!collides&&visible.size<maxLabels)){visible.add(id);occupied.push(box)}
  }
  return visible;
+}
+
+// Preserve offsets during camera movement, then ease toward the settled layout.
+export function settleNodes(points,targets,offsets,{dt=.016,freeze=false,snap=false}={}){
+ const goals=new Map(targets.map(point=>[point.id,point]));
+ const ease=snap?1:1-Math.exp(-Math.max(0,Math.min(.05,dt))/ .16);
+ return points.map(point=>{
+  const previous=offsets.get(point.id)||{x:0,y:0},target=goals.get(point.id)||point;
+  const desired={x:target.x-point.x,y:target.y-point.y};
+  const next=freeze?previous:{x:previous.x+(desired.x-previous.x)*ease,y:previous.y+(desired.y-previous.y)*ease};
+  if(!freeze&&Math.hypot(next.x-desired.x,next.y-desired.y)<.05){next.x=desired.x;next.y=desired.y}
+  offsets.set(point.id,next);
+  return {...point,x:point.x+next.x,y:point.y+next.y};
+ });
 }
